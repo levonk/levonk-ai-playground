@@ -6,7 +6,9 @@
     "git",
     "just",
     "python315",
-    "python312Packages.huggingface-hub",
+    "python3.pkgs.huggingface-hub",
+    "python3.pkgs.ray",
+    "github:AlexsJones/llmfit",
     "docker"
   ],
   "shell": {

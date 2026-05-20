@@ -1,6 +1,7 @@
 # https://catalog.ngc.nvidia.com/orgs/nvidia/containers/vllm
+# https://github.com/AlexsJones/llmfit
 #
-source ~/.local/bin/.env
+source .env
 
 # Authorize with hf
 if [ "x$HUGGING_FACE_HUB_TOKEN" != "x" ]; then
@@ -10,16 +11,15 @@ if [ "x$HUGGING_FACE_HUB_TOKEN" != "x" ]; then
 fi
 	
 # Prevent Out of Memory
-sync && echo 3 > /proc/sys/vm/drop_caches
+sudo sync && echo 3 > /proc/sys/vm/drop_caches
 
-ACCT=z-lab
-MODEL=Qwen3.6-27B-DFlash
-
-MAX_CONTEXT_LEGNTH=256000 # 264kb
+ACCT=cyankiwi
+MODEL=Qwen3-Coder-Next-AWQ-4bit
 
 LOCAL_CACHE_DIR=/root/.cache
 CONTAINER_CACHE_DIR=/root/.cache
-docker run -it --gpus all -p 8000:8000 \
+docker stop $MODEL
+docker run -it --rm --gpus all -p 8001:8001 \
 	--ipc=host --ulimit memlock=-1 --ulimit stack=67108864 \
 	-v $LOCAL_CACHE_DIR/huggingface:$CONTAINER_CACHE_DIR/huggingface \
 	-v $LOCAL_CACHE_DIR/torch:$CONTAINER_CACHE_DIR/torch \
@@ -33,12 +33,8 @@ docker run -it --gpus all -p 8000:8000 \
 	--trust-remote-code \
 	--tensor-parallel-size 1 \
 	--gpu-memory-utilization 0.90 \
-	--attention-backend flash_attn \
 	--max-num-batched-tokens 32768 \
-	--max-model-len ${MAX_CONTEXT_LENGTH:-256000} \
-	--speculative-config '{"method": "dflash", "model": "$ACCT/$MODEL", "num_speculative_tokens": 15}' \
+	--quantization awq_merlin \
 	--model $ACCT/$MODEL
 	
-# --quantization awq \
-# google/gemma-4-31B-it
 
