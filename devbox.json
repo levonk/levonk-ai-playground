@@ -1,0 +1,33 @@
+{
+  "name": "levonk-ai-playground",
+  "version": "0.1.0",
+  "description": "A Model Deployment Playground",
+  "packages": [
+    "git",
+    "just",
+    "python315",
+    "python312Packages.huggingface-hub",
+    "docker"
+  ],
+  "shell": {
+    "init_hook": [
+    ]
+  },
+  "scripts": {
+    "bootstrap": "just bootstrap-internal",
+    "doctor": "just doctor-internal",
+    "clean": "just clean-internal",
+    "build": "just build-internal",
+    "lint": "just lint-internal",
+    "test": "just test-internal",
+    "typecheck": "just typecheck-internal",
+    "dev": "just dev-internal",
+    "debug": "just debug-internal",
+    "install": "just install-internal",
+    "release": "just release-internal"
+  },
+  "env": {
+    "RUST_LOG": "info",
+    "RUST_BACKTRACE": "1"
+  }
+}
