@@ -1,42 +1,37 @@
-# https://catalog.ngc.nvidia.com/orgs/nvidia/containers/vllm
-# https://github.com/AlexsJones/llmfit
+#!/usr/bin/env bash
 #
-source .env
+# vLLM General/Thinking Model Runner
+# Model: Qwen3-Next-80B-A3B-Thinking-AWQ-4bit
+# https://catalog.ngc.nvidia.com/orgs/nvidia/containers/vllm
+#
 
-# Authorize with hf
-if [ "x$HUGGING_FACE_HUB_TOKEN" != "x" ]; then
-	if command -v hf ; then
-		hf auth login --token "$HUGGING_FACE_HUB_TOKEN"
-	fi
-fi
-	
-# Prevent Out of Memory
-sudo sync && echo 3 > /proc/sys/vm/drop_caches
+set -euo pipefail
 
-ACCT=cyankiwi
-MODEL=Qwen3-Next-80B-A3B-Thinking-AWQ-4bit
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=./vllm-runner-lib.sh
+source "$SCRIPT_DIR/vllm-runner-lib.sh"
 
-LOCAL_CACHE_DIR=/root/.cache
-CONTAINER_CACHE_DIR=/root/.cache
-docker stop $MODEL
-docker run -it --rm --gpus all -p 8000:8000 \
-	--ipc=host --ulimit memlock=-1 --ulimit stack=67108864 \
-	-v $LOCAL_CACHE_DIR/huggingface:$CONTAINER_CACHE_DIR/huggingface \
-	-v $LOCAL_CACHE_DIR/torch:$CONTAINER_CACHE_DIR/torch \
-	-v $LOCAL_CACHE_DIR/torch_extensions:$CONTAINER_CACHE_DIR/torch_extensions \
-	-v $LOCAL_CACHE_DIR/vllm:$CONTAINER_CACHE_DIR/vllm \
-	-v $LOCAL_CACHE_DIR/flashinfer:$CONTAINER_CACHE_DIR/flashinfer \
-	-e HUGGING_FACE_HUB_TOKEN=${HUGGING_FACE_HUB_TOKEN:-hf_YOUR_TOKEN} \
-	--name $MODEL \
-       	nvcr.io/nvidia/vllm:26.04-py3 \
-	python3 -m vllm.entrypoints.openai.api_server \
-	--port 8000 \
-	--trust-remote-code \
-	--tensor-parallel-size 1 \
-	--gpu-memory-utilization 0.90 \
-	--max-num-batched-tokens 32768 \
-	--max-model-len 262144 \
-	--speculative-config '{"method":"qwen3_next_mtp","num_speculative_tokens":2}' \
-	--model $ACCT/$MODEL
+# Model-specific configuration
+ACCT="${ACCT:-cyankiwi}"
+MODEL="${MODEL:-Qwen3-Next-80B-A3B-Thinking-AWQ-4bit}"
+HOST_PORT="${HOST_PORT:-8003}"
+
+# Additional vLLM parameters for this model
+MAX_MODEL_LEN="${MAX_MODEL_LEN:-262144}"
+
+main() {
+  load_env
+  check_prerequisites
+  setup_huggingface
+  clear_caches
+  stop_existing_container "$MODEL"
+
+  # Model-specific vLLM arguments with speculative decoding
+  run_vllm_container "$ACCT" "$MODEL" "$HOST_PORT" \
+    --max-model-len "$MAX_MODEL_LEN" \
+    --speculative-config '{"method":"qwen3_next_mtp","num_speculative_tokens":2}'
+}
+
+main "$@"
 	
 
