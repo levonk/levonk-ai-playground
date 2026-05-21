@@ -24,8 +24,7 @@ main() {
   stop_existing_container "$MODEL"
 
   # Model-specific vLLM arguments
-  run_vllm_container "$ACCT" "$MODEL" "$HOST_PORT" \
-    --quantization awq_merlin
+  run_vllm_container "$ACCT" "$MODEL" "$HOST_PORT"
 }
 
 main "$@"
