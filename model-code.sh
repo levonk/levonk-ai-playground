@@ -24,10 +24,12 @@ main() {
   stop_existing_container "$MODEL"
 
   # Model-specific vLLM arguments
-  run_vllm_container "$ACCT" "$MODEL" "$HOST_PORT" \
-    --quantization awq_merlin
+  # Set GPU memory to 0.8 (GPU has 119 GiB, plenty available)
+  # Enable FlashInfer MoE optimization for better performance
+  GPU_MEMORY_UTILIZATION=0.8
+  VLLM_USE_FLASHINFER_MOE_FP16=1
+  VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=0
+  run_vllm_container "$ACCT" "$MODEL" "$HOST_PORT"
 }
 
 main "$@"
-	
-

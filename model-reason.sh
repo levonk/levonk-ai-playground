@@ -24,8 +24,14 @@ main() {
   stop_existing_container "$MODEL"
 
   # Model-specific vLLM arguments
-  run_vllm_container "$ACCT" "$MODEL" "$HOST_PORT"
+  # Add --tokenizer to fix missing tokenizer issue
+  # Set GPU memory to 0.6 for side-by-side with coding model
+  # Enable FlashInfer MoE optimization for better performance
+  # Disable CUDA graph memory profiling to avoid memory estimation issues
+  GPU_MEMORY_UTILIZATION=0.6
+  VLLM_USE_FLASHINFER_MOE_FP16=1
+  VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=0
+  run_vllm_container "$ACCT" "$MODEL" "$HOST_PORT" --tokenizer Qwen/Qwen2.5-32B-Instruct
 }
 
 main "$@"
-

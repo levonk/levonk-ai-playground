@@ -87,13 +87,17 @@ run_vllm_container() {
   local tensor_parallel_size="${TENSOR_PARALLEL_SIZE:-$DEFAULT_TENSOR_PARALLEL_SIZE}"
   local gpu_memory_utilization="${GPU_MEMORY_UTILIZATION:-$DEFAULT_GPU_MEMORY_UTILIZATION}"
   local max_num_batched_tokens="${MAX_NUM_BATCHED_TOKENS:-$DEFAULT_MAX_NUM_BATCHED_TOKENS}"
+  local flashinfer_moe="${VLLM_USE_FLASHINFER_MOE_FP16:-0}"
+  local memory_profiler_cuda="${VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS:-0}"
 
   echo "Starting vLLM container for model: $account/$model"
   echo "Host Port: $host_port"
   echo "Tensor Parallel Size: $tensor_parallel_size"
   echo "GPU Memory Utilization: $gpu_memory_utilization"
+  echo "FlashInfer MoE FP16: $flashinfer_moe"
+  echo "Memory Profiler CUDA Graphs: $memory_profiler_cuda"
 
-  docker run -it --rm --gpus all -p "$host_port:8000" \
+  docker run --rm --gpus all -p "$host_port:8000" \
     --ipc=host \
     --ulimit memlock=-1 \
     --ulimit stack=67108864 \
@@ -103,6 +107,8 @@ run_vllm_container() {
     -v "$local_cache_dir/vllm:$container_cache_dir/vllm" \
     -v "$local_cache_dir/flashinfer:$container_cache_dir/flashinfer" \
     -e "HUGGING_FACE_HUB_TOKEN=${HUGGING_FACE_HUB_TOKEN:-}" \
+    -e "VLLM_USE_FLASHINFER_MOE_FP16=${flashinfer_moe}" \
+    -e "VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=${memory_profiler_cuda}" \
     --name "$model" \
     nvcr.io/nvidia/vllm:26.04-py3 \
     python3 -m vllm.entrypoints.openai.api_server \

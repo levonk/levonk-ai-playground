@@ -12,7 +12,9 @@
     "docker"
   ],
   "shell": {
+    "create_venv": true,
     "init_hook": [
+      "pip install --break-system-packages --upgrade 'transformers>=4.40,<4.42' tokenizers"
     ]
   },
   "scripts": {
