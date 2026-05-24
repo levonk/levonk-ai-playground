@@ -28,7 +28,11 @@ main() {
   # Set GPU memory to 0.9 (large model needs more memory)
   # Enable FlashInfer MoE optimization for better performance
   # Disable CUDA graph memory profiling to avoid memory estimation issues
+<<<<<<< HEAD
   GPU_MEMORY_UTILIZATION=0.9
+=======
+  GPU_MEMORY_UTILIZATION=0.65
+>>>>>>> a26b2c74ce66679c086bb2f06efc122305021552
   VLLM_USE_FLASHINFER_MOE_FP16=1
   VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=0
   run_vllm_container "$ACCT" "$MODEL" "$HOST_PORT" --tokenizer Qwen/Qwen2.5-32B-Instruct
