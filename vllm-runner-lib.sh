@@ -97,6 +97,8 @@ run_vllm_container() {
   echo "FlashInfer MoE FP16: $flashinfer_moe"
   echo "Memory Profiler CUDA Graphs: $memory_profiler_cuda"
 
+  nvidia-smi
+
   docker run --rm --gpus all -p "$host_port:8000" \
     --ipc=host \
     --ulimit memlock=-1 \
