@@ -12,8 +12,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/vllm-runner-lib.sh"
 
 # Model-specific configuration
-ACCT="${ACCT:-hesamation}"
-MODEL="${MODEL:-Qwen3.6-35B-A3B-Claude-4.6-Opus-Reasoning-Distilled}"
+ACCT="${ACCT:-codgician}"
+MODEL="${MODEL:-Qwen3.5-35B-A3B-Claude-4.6-Opus-Reasoning-Distilled-GPTQ-int4}"
 HOST_PORT="${HOST_PORT:-8002}"
 
 main() {
@@ -31,6 +31,7 @@ main() {
   GPU_MEMORY_UTILIZATION=0.9
   VLLM_USE_FLASHINFER_MOE_FP16=1
   VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=0
+  #run_vllm_container "$ACCT" "$MODEL" "$HOST_PORT" --tokenizer qwen2.Qwen2TokenizerFast
   run_vllm_container "$ACCT" "$MODEL" "$HOST_PORT"
 }
 
