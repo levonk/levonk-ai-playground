@@ -2,15 +2,20 @@
   "name": "levonk-ai-playground",
   "version": "0.1.0",
   "description": "A Model Deployment Playground",
-  "packages": [
-    "git",
-    "just",
-    "python315",
-    "python3.pkgs.huggingface-hub",
-    "python3.pkgs.ray",
-    "github:AlexsJones/llmfit",
-    "docker"
-  ],
+  "packages": {
+    "git": "",
+    "just": "",
+    "python315": "",
+    "python3.pkgs.huggingface-hub": "",
+    "python3.pkgs.ray": "",
+    "github:AlexsJones/llmfit": "",
+    "github:levonk/levonk-packages#devbox-rtk-nodejs-pnpm-force": "",
+    "github:levonk/levonk-packages#devbox-rtk-python-uv-force": "",
+    "github:levonk/levonk-packages#bundle-rtk-core": "",
+    "github:levonk/levonk-packages#bundle-rtk-cloud": "",
+    "github:levonk/smartfo": "",
+    "docker": ""
+  },
   "shell": {
     "create_venv": true,
     "init_hook": [
