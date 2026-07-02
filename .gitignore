@@ -3,3 +3,6 @@
 *.bak
 *.swp
 
+# Devbox-generated artifacts (venvs, hooks, nix store symlinks)
+.devbox/
+
