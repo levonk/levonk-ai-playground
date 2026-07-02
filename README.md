@@ -161,6 +161,7 @@ All scripts support these environment variables:
 - `GPU_MEMORY_UTILIZATION` - GPU memory utilization ratio (default: 0.90)
 - `MAX_NUM_BATCHED_TOKENS` - Maximum batched tokens (default: 32768)
 - `HUGGING_FACE_HUB_TOKEN` - HF token for private models (loaded from `.env`)
+- `OTLP_TRACES_ENDPOINT` - OTLP endpoint for OpenTelemetry tracing (e.g. `http://openlit:4318`). When set, vLLM gets `--otlp-traces-endpoint` and accepts incoming `traceparent` headers for distributed tracing with LiteLLM. Empty/unset = tracing disabled.
 
 ## Adding a New Model
 

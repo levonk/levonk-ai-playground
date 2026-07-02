@@ -89,6 +89,7 @@ run_vllm_container() {
   local max_num_batched_tokens="${MAX_NUM_BATCHED_TOKENS:-$DEFAULT_MAX_NUM_BATCHED_TOKENS}"
   local flashinfer_moe="${VLLM_USE_FLASHINFER_MOE_FP16:-0}"
   local memory_profiler_cuda="${VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS:-0}"
+  local otlp_endpoint="${OTLP_TRACES_ENDPOINT:-}"
 
   echo "Starting vLLM container for model: $account/$model"
   echo "Host Port: $host_port"
@@ -96,8 +97,20 @@ run_vllm_container() {
   echo "GPU Memory Utilization: $gpu_memory_utilization"
   echo "FlashInfer MoE FP16: $flashinfer_moe"
   echo "Memory Profiler CUDA Graphs: $memory_profiler_cuda"
+  if [ -n "$otlp_endpoint" ]; then
+    echo "OTLP Traces Endpoint: $otlp_endpoint"
+  else
+    echo "OTLP Traces Endpoint: (disabled)"
+  fi
 
   nvidia-smi
+
+  local -a otel_args=()
+  local -a otel_env=()
+  if [ -n "$otlp_endpoint" ]; then
+    otel_args+=(--otlp-traces-endpoint "$otlp_endpoint")
+    otel_env+=(-e "OTEL_EXPORTER_OTLP_ENDPOINT=${otlp_endpoint}")
+  fi
 
   docker run --rm --gpus all -p "$host_port:8000" \
     --ipc=host \
@@ -111,6 +124,7 @@ run_vllm_container() {
     -e "HUGGING_FACE_HUB_TOKEN=${HUGGING_FACE_HUB_TOKEN:-}" \
     -e "VLLM_USE_FLASHINFER_MOE_FP16=${flashinfer_moe}" \
     -e "VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=${memory_profiler_cuda}" \
+    "${otel_env[@]}" \
     --name "$model" \
     nvcr.io/nvidia/vllm:26.04-py3 \
     python3 -m vllm.entrypoints.openai.api_server \
@@ -119,6 +133,7 @@ run_vllm_container() {
     --tensor-parallel-size "$tensor_parallel_size" \
     --gpu-memory-utilization "$gpu_memory_utilization" \
     --max-num-batched-tokens "$max_num_batched_tokens" \
+    "${otel_args[@]}" \
     "${additional_args[@]}" \
     --model "$account/$model"
 }
