@@ -12,9 +12,10 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/vllm-runner-lib.sh"
 
 # Model-specific configuration
-ACCT="${ACCT:-Intel}"
-#MODEL="${MODEL:-Qwen3-Coder-Next-AWQ-4bit}"
-MODEL="${MODEL:-Qwen3-Coder-Next-int4-AutoRound}"
+ACCT="${ACCT:-cyankiwi}"
+MODEL="${MODEL:-Qwen3-Coder-Next-AWQ-4bit}"
+#ACCT="${ACCT:-Intel}"
+#MODEL="${MODEL:-Qwen3-Coder-Next-int4-AutoRound}"
 HOST_PORT="${HOST_PORT:-8001}"
 
 main() {
