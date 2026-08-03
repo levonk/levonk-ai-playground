@@ -5,6 +5,7 @@
   "packages": {
     "git": "",
     "just": "",
+    "shellcheck": "",
     "python315": "",
     "python3.pkgs.huggingface-hub": "",
     "python3.pkgs.ray": "",
