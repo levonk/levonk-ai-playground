@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
 #
-# vLLM Chat Model Runner
+# Chat Model Runner
 # Model: Qwen3-Next-80B-A3B-Instruct-AWQ-4bit
-# https://catalog.ngc.nvidia.com/orgs/nvidia/containers/vllm
+# Runtime: SGLang (default) — AWQ-4bit is supported by SGLang on GB10
 #
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=./vllm-runner-lib.sh
-source "$SCRIPT_DIR/vllm-runner-lib.sh"
+# shellcheck source=./runner-lib.sh
+source "$SCRIPT_DIR/runner-lib.sh"
 
 # Model-specific configuration
 ACCT="${ACCT:-cyankiwi}"
@@ -23,8 +23,7 @@ main() {
   clear_caches
   stop_existing_container "$MODEL"
 
-  # Model-specific vLLM arguments
-  run_vllm_container "$ACCT" "$MODEL" "$HOST_PORT"
+  run_container "$ACCT" "$MODEL" "$HOST_PORT"
 }
 
 main "$@"
