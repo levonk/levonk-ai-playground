@@ -2,6 +2,8 @@
 
 Primarily tracks top performers from https://github.com/AlexsJones/llmfit for Nvidia GB10 128GB, CUDA w/ vLLM
 
+> **AI agents**: see [`AGENTS.md`](AGENTS.md) for binding project context, conventions, and boundaries before editing this repo.
+
 ## Architecture
 
 This project uses a **shared library pattern** for DRY (Don't Repeat Yourself) code organization:
