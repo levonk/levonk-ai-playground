@@ -1,13 +1,16 @@
 #!/usr/bin/env bash
 #
 # LLM Model Runner Library
-# Shared functions for deploying LLM models with Docker
+# Shared functions for deploying LLM models across multiple runtimes
 #
-# Supports two inference runtimes:
-#   - SGLang (cu130) — default for supported in-VRAM models on GB10/Blackwell
-#   - vLLM           — fallback for models/quants/parallelism SGLang does not support
+# Supports four inference runtimes (per ADR-202608021744 as amended 2026-08-26):
+#   - SGLang (cu130)   — default for in-VRAM dense models on GB10/Blackwell (Docker)
+#   - FreeToken        — default for MoE models, in-VRAM and frontier (native Python)
+#   - vLLM             — fallback for GPTQ/compressed-tensors/multi-GPU PP (Docker)
+#   - MLX (vllm-mlx)   — Apple Silicon Mac serving via Metal/MLX (native Python)
 #
 # See ADR-202608021744 for the tiered runtime selection rationale.
+# See adr-20260826-freetoken-runtime-amendment.md for the FreeToken amendment.
 #
 
 set -euo pipefail
@@ -15,27 +18,41 @@ set -euo pipefail
 # =============================================================================
 # Runtime Selection — change this to swap the inference engine
 # =============================================================================
-# Set RUNTIME to "sglang" or "vllm".  All scripts that source this library
-# and call run_container() will use the selected runtime.
+# Set RUNTIME to one of: "sglang", "freetoken", "vllm", "mlx".
+# All scripts that source this library and call run_container() will use the
+# selected runtime.
 #
 # Individual scripts can override by exporting RUNTIME before sourcing this
 # file, e.g.:
 #
 #     RUNTIME=vllm source "$SCRIPT_DIR/runner-lib.sh"
 #
-# Per ADR-202608021744: SGLang is the default; vLLM is retained as fallback
-# for GPTQ, compressed-tensors, multi-GPU pipeline parallel, and models
-# SGLang does not yet support.
+# Per ADR-202608021744 (amended):
+#   - SGLang is the default for in-VRAM dense models on GB10
+#   - FreeToken is the default for MoE models (both in-VRAM and frontier)
+#   - vLLM is the fallback for GPTQ, compressed-tensors, multi-GPU PP, and
+#     models SGLang/FreeToken do not yet support
+#   - MLX is for Apple Silicon Mac hosts (Mac Studio, MacBook Pro, etc.)
 #
 # NOTE: Model-specific args passed to run_container() (e.g. --max-model-len,
 # --speculative-config) are runtime-specific.  When switching runtimes you
 # may need to adjust those args in the individual model-*.sh scripts.
+#
+# NOTE: SGLang and vLLM run in Docker containers (GPU host).  FreeToken and
+# MLX run as native Python processes (no Docker).  The dispatcher handles
+# this transparently — callers always use run_container() regardless of
+# runtime.
 # =============================================================================
 RUNTIME="${RUNTIME:-sglang}"
 
 # Pinned image tags (do NOT use floating "latest" tags in production)
 SGLANG_IMAGE="lmsysorg/sglang:v0.5.16-cu130"
 VLLM_IMAGE="nvcr.io/nvidia/vllm:26.04-py3"
+
+# FreeToken and MLX are native Python — no Docker image.
+# Pin to a specific PyPI version or git tag in the model script or .env.
+FREETOKEN_VERSION="${FREETOKEN_VERSION:-}"
+MLX_VERSION="${MLX_VERSION:-}"
 
 # Default configuration
 DEFAULT_LOCAL_CACHE_DIR="/root/.cache"
@@ -56,18 +73,40 @@ load_env() {
 check_prerequisites() {
   local missing=()
 
-  command -v docker >/dev/null 2>&1 || missing+=("docker")
-  command -v sudo >/dev/null 2>&1 || missing+=("sudo")
+  # Docker-based runtimes (sglang, vllm) need docker + sudo
+  if [ "$RUNTIME" = "sglang" ] || [ "$RUNTIME" = "vllm" ]; then
+    command -v docker >/dev/null 2>&1 || missing+=("docker")
+    command -v sudo >/dev/null 2>&1 || missing+=("sudo")
 
-  if [ ${#missing[@]} -gt 0 ]; then
-    echo "Error: Missing required commands: ${missing[*]}"
-    exit 1
+    if [ ${#missing[@]} -gt 0 ]; then
+      echo "Error: Missing required commands for RUNTIME=$RUNTIME: ${missing[*]}"
+      exit 1
+    fi
+
+    # Check if Docker is running
+    if ! docker info >/dev/null 2>&1; then
+      echo "Error: Docker is not running. Please start Docker and try again."
+      exit 1
+    fi
   fi
 
-  # Check if Docker is running
-  if ! docker info >/dev/null 2>&1; then
-    echo "Error: Docker is not running. Please start Docker and try again."
-    exit 1
+  # FreeToken needs the `ft` CLI
+  if [ "$RUNTIME" = "freetoken" ]; then
+    if ! command -v ft >/dev/null 2>&1; then
+      echo "Error: FreeToken 'ft' CLI not found."
+      echo "Install with: uv pip install \"freetoken[accel]\""
+      exit 1
+    fi
+  fi
+
+  # MLX needs the `vllm-mlx` CLI (Apple Silicon only)
+  if [ "$RUNTIME" = "mlx" ]; then
+    if ! command -v vllm-mlx >/dev/null 2>&1; then
+      echo "Error: vllm-mlx CLI not found."
+      echo "Install with: pip install vllm-mlx"
+      echo "Requires Apple Silicon Mac (M1+) with macOS 14+."
+      exit 1
+    fi
   fi
 }
 
@@ -95,12 +134,32 @@ clear_caches() {
   fi
 }
 
-# Stop existing container if running
+# Stop existing container or process if running
 stop_existing_container() {
   local container_name="$1"
-  if docker ps -q -f name="$container_name" | grep -q .; then
-    echo "Stopping existing container: $container_name"
-    docker stop "$container_name" >/dev/null 2>&1 || true
+
+  if [ "$RUNTIME" = "sglang" ] || [ "$RUNTIME" = "vllm" ]; then
+    # Docker-based: stop by container name
+    if docker ps -q -f name="$container_name" | grep -q .; then
+      echo "Stopping existing container: $container_name"
+      docker stop "$container_name" >/dev/null 2>&1 || true
+    fi
+  else
+    # Native Python (freetoken, mlx): kill by process name match
+    # Look for processes matching the model name on any port
+    local pids
+    pids=$(pgrep -f "$container_name" 2>/dev/null || true)
+    if [ -n "$pids" ]; then
+      echo "Stopping existing process: $container_name (pids: $pids)"
+      echo "$pids" | xargs kill 2>/dev/null || true
+      sleep 2
+      # Force kill if still running
+      pids=$(pgrep -f "$container_name" 2>/dev/null || true)
+      if [ -n "$pids" ]; then
+        echo "Force killing: $pids"
+        echo "$pids" | xargs kill -9 2>/dev/null || true
+      fi
+    fi
   fi
 }
 
@@ -108,15 +167,31 @@ stop_existing_container() {
 # Dispatcher — routes to the selected runtime
 # =============================================================================
 # Usage: run_container <account> <model> <host_port> [additional_args...]
+#
+# Routes to the appropriate runtime launcher based on $RUNTIME:
+#   sglang    → run_sglang_container() (Docker)
+#   vllm      → run_vllm_container()   (Docker)
+#   freetoken → run_freetoken()        (native Python, no Docker)
+#   mlx       → run_mlx()              (native Python, no Docker, Apple Silicon)
 run_container() {
-  if [ "$RUNTIME" = "sglang" ]; then
-    run_sglang_container "$@"
-  elif [ "$RUNTIME" = "vllm" ]; then
-    run_vllm_container "$@"
-  else
-    echo "Error: Unknown RUNTIME '$RUNTIME'. Use 'sglang' or 'vllm'." >&2
-    exit 1
-  fi
+  case "$RUNTIME" in
+    sglang)
+      run_sglang_container "$@"
+      ;;
+    vllm)
+      run_vllm_container "$@"
+      ;;
+    freetoken)
+      run_freetoken "$@"
+      ;;
+    mlx)
+      run_mlx "$@"
+      ;;
+    *)
+      echo "Error: Unknown RUNTIME '$RUNTIME'. Use 'sglang', 'freetoken', 'vllm', or 'mlx'." >&2
+      exit 1
+      ;;
+  esac
 }
 
 # =============================================================================
@@ -245,4 +320,119 @@ run_vllm_container() {
     "${otel_args[@]}" \
     "${additional_args[@]}" \
     --model "$account/$model"
+}
+
+# =============================================================================
+# FreeToken runner (native Python, no Docker — MoE default per ADR amendment)
+# =============================================================================
+# Usage: run_freetoken <account> <model> <host_port> [additional_args...]
+#
+# FreeToken is the default runtime for MoE models (both in-VRAM and frontier)
+# per ADR-202608021744 as amended 2026-08-26. It runs as a native Python
+# process — no Docker container. The `ft` CLI must be installed:
+#
+#   uv pip install "freetoken[accel]"
+#
+# FreeToken supports MXFP4, NVFP4, FP8, BF16, and GGUF (Gemma-4 only).
+# It does NOT support GPTQ — use RUNTIME=vllm for GPTQ models.
+#
+# FreeToken's default port is 1919; we override with --port to stay within
+# the repo's 8000+ port convention.
+#
+# Environment variables:
+#   FREETOKEN_MOE_BACKEND  — auto|fused|offload|cpu|hybrid (default: auto)
+#   FREETOKEN_BENCH_BW     — if "1", run `ft bench bw` before serving
+#
+run_freetoken() {
+  local account="$1"
+  local model="$2"
+  local host_port="$3"
+  shift 3
+  local additional_args=("$@")
+
+  local moe_backend="${FREETOKEN_MOE_BACKEND:-auto}"
+  local run_bench="${FREETOKEN_BENCH_BW:-0}"
+
+  echo "Starting FreeToken server for model: $account/$model"
+  echo "Host Port: $host_port"
+  echo "MoE Backend: $moe_backend"
+  if [ -n "$FREETOKEN_VERSION" ]; then
+    echo "FreeToken Version: $FREETOKEN_VERSION"
+  else
+    echo "FreeToken Version: (unpinned — set FREETOKEN_VERSION for reproducibility)"
+  fi
+
+  # Optional: calibrate bandwidth profile (run once per machine)
+  if [ "$run_bench" = "1" ]; then
+    echo "Running ft bench bw to calibrate bandwidth profile..."
+    ft bench bw
+  fi
+
+  # FreeToken accepts HF repo ids or local paths via --model
+  # It auto-detects dtype, attention/MoE backends, cache sizes, and
+  # tool-call/reasoning parsers from the checkpoint.
+  ft serve \
+    --model "$account/$model" \
+    --port "$host_port" \
+    --moe-backend "$moe_backend" \
+    "${additional_args[@]}"
+}
+
+# =============================================================================
+# MLX runner (native Python, no Docker — Apple Silicon Mac serving)
+# =============================================================================
+# Usage: run_mlx <account> <model> <host_port> [additional_args...]
+#
+# MLX is the runtime for Apple Silicon Mac hosts (Mac Studio, MacBook Pro,
+# Mac Mini with M1+ chips). It uses Apple's MLX framework via vllm-mlx,
+# which provides vLLM-style serving with:
+#   - Continuous batching
+#   - Paged KV cache
+#   - Prefix caching
+#   - SSD-tiered cache
+#   - OpenAI + Anthropic API compatibility
+#   - Multimodal model support
+#
+# Install:
+#   pip install vllm-mlx
+#
+# Requires Apple Silicon (M1+) with macOS 14+. Unified memory is used
+# directly — no conversion step. Models from mlx-community on HuggingFace
+# are pre-converted to MLX format; other safetensors checkpoints are
+# auto-converted on first load.
+#
+# Environment variables:
+#   MLX_CONTINUOUS_BATCHING — if "1", enable continuous batching (default: 1)
+#   MLX_MAX_KV_SIZE         — max KV cache size in tokens (optional)
+#
+run_mlx() {
+  local account="$1"
+  local model="$2"
+  local host_port="$3"
+  shift 3
+  local additional_args=("$@")
+
+  local continuous_batching="${MLX_CONTINUOUS_BATCHING:-1}"
+
+  echo "Starting vllm-mlx server for model: $account/$model"
+  echo "Host Port: $host_port"
+  echo "Continuous Batching: $continuous_batching"
+  if [ -n "$MLX_VERSION" ]; then
+    echo "vllm-mlx Version: $MLX_VERSION"
+  else
+    echo "vllm-mlx Version: (unpinned — set MLX_VERSION for reproducibility)"
+  fi
+
+  # vllm-mlx serves on the specified port with OpenAI + Anthropic APIs
+  # The --continuous-batching flag enables vLLM-style batched serving
+  local -a mlx_args=()
+  if [ "$continuous_batching" = "1" ]; then
+    mlx_args+=(--continuous-batching)
+  fi
+
+  vllm-mlx serve \
+    --port "$host_port" \
+    "${mlx_args[@]}" \
+    "${additional_args[@]}" \
+    "$account/$model"
 }
