@@ -43,7 +43,8 @@ set -euo pipefail
 # this transparently — callers always use run_container() regardless of
 # runtime.
 # =============================================================================
-RUNTIME="${RUNTIME:-sglang}"
+# RUNTIME is resolved after detect_system()/detect_runtime() are defined below.
+# Scripts can override by setting RUNTIME before sourcing this file.
 
 # Pinned image tags (do NOT use floating "latest" tags in production)
 SGLANG_IMAGE="lmsysorg/sglang:v0.5.16-cu130"
@@ -60,6 +61,106 @@ DEFAULT_CONTAIN_CACHE_DIR="/root/.cache"
 DEFAULT_TENSOR_PARALLEL_SIZE=1
 DEFAULT_GPU_MEMORY_UTILIZATION=0.90
 DEFAULT_MAX_NUM_BATCHED_TOKENS=32768
+
+# =============================================================================
+# System Detection — auto-detect GPU/hardware type and pick a default runtime
+# =============================================================================
+# detect_system() prints one of:
+#   nvidia          — NVIDIA GPU present (DGX Spark, workstations with CUDA)
+#   apple-silicon   — Apple Silicon Mac (M1/M2/M3/M4/M5, unified memory)
+#   vulkan          — Vulkan-capable GPU (AMD, Intel) but no NVIDIA
+#   cpu             — no GPU detected, CPU-only fallback
+#
+# detect_runtime() prints the default runtime for the detected system:
+#   nvidia        → sglang   (dense default per ADR)
+#   apple-silicon → mlx      (MLX via vllm-mlx)
+#   vulkan        → vllm     (vLLM with Vulkan backend, or llama.cpp)
+#   cpu           → vllm     (CPU fallback — slow but works)
+#
+# Scripts can override either by exporting RUNTIME or SYSTEM before sourcing.
+detect_system() {
+  # Allow explicit override
+  if [ -n "${SYSTEM:-}" ]; then
+    echo "$SYSTEM"
+    return
+  fi
+
+  # NVIDIA: check for nvidia-smi
+  if command -v nvidia-smi >/dev/null 2>&1 && nvidia-smi >/dev/null 2>&1; then
+    echo "nvidia"
+    return
+  fi
+
+  # Apple Silicon: check for macOS + Apple chip
+  if [ "$(uname)" = "Darwin" ]; then
+    local cpu_brand
+    cpu_brand=$(sysctl -n machdep.cpu.brand_string 2>/dev/null || echo "")
+    if echo "$cpu_brand" | grep -qi "Apple"; then
+      echo "apple-silicon"
+      return
+    fi
+  fi
+
+  # Vulkan: check for vulkaninfo
+  if command -v vulkaninfo >/dev/null 2>&1; then
+    echo "vulkan"
+    return
+  fi
+
+  # Fallback: CPU-only
+  echo "cpu"
+}
+
+detect_runtime() {
+  local system="${1:-$(detect_system)}"
+  case "$system" in
+    nvidia)        echo "sglang" ;;
+    apple-silicon) echo "mlx" ;;
+    vulkan)        echo "vllm" ;;
+    cpu)           echo "vllm" ;;
+    *)             echo "vllm" ;;
+  esac
+}
+
+# Resolve RUNTIME if not explicitly set by the script.
+# Called automatically when the library is sourced, but scripts can
+# override by setting RUNTIME before calling run_container().
+if [ -z "${RUNTIME:-}" ]; then
+  RUNTIME="$(detect_runtime)"
+fi
+
+# =============================================================================
+# Per-system model configuration helper
+# =============================================================================
+# configure_for_system() sets ACCT, MODEL, HOST_PORT, and RUNTIME based on
+# the detected system. Each model script defines a configure_model() function
+# with a case statement per system, then calls this helper.
+#
+# Pattern (in model-*.sh):
+#
+#   configure_model() {
+#     case "$(detect_system)" in
+#       nvidia)
+#         ACCT="cyankiwi"
+#         MODEL="Qwen3-Next-80B-A3B-Instruct-AWQ-4bit"
+#         HOST_PORT=8000
+#         RUNTIME="sglang"
+#         ;;
+#       apple-silicon)
+#         ACCT="mlx-community"
+#         MODEL="Qwen3-Next-80B-A3B-Instruct-4bit"
+#         HOST_PORT=8000
+#         RUNTIME="mlx"
+#         ;;
+#       *)
+#         echo "Unsupported system for this model" >&2
+#         exit 1
+#         ;;
+#     esac
+#   }
+#
+# The script's main() calls configure_model() before run_container().
+# =============================================================================
 
 # Load environment variables from .env if it exists
 load_env() {
@@ -124,8 +225,18 @@ setup_huggingface() {
   fi
 }
 
-# Clear system caches to prevent OOM (requires sudo)
+# Clear system caches to prevent OOM (requires sudo on Linux)
 clear_caches() {
+  # macOS doesn't have /proc/sys/vm/drop_caches; use purge if available
+  if [ "$(uname)" = "Darwin" ]; then
+    if command -v purge >/dev/null 2>&1; then
+      echo "Purging disk cache (macOS)..."
+      purge 2>/dev/null || echo "Warning: purge failed (needs sudo). Continuing..."
+    fi
+    return
+  fi
+
+  # Linux: drop_caches
   if [ "$EUID" -eq 0 ] || sudo -n true 2>/dev/null; then
     echo "Clearing system caches to prevent OOM..."
     sudo sync && echo 3 | sudo tee /proc/sys/vm/drop_caches >/dev/null
