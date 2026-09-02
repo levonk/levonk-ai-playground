@@ -16,7 +16,7 @@ aliases: []
 tags: [doc/architecture/gdr]
 supersedes: []
 superseded-by: []
-related-to: ["adr-202608021744-sglang-glom-runtime-mapping"]
+related-to: ["adr-202608021744-sglang-glom-runtime-mapping", "adr-20260831-mac-studio-multi-host-deployment"]
 scope:
   impact-scope:
     - "model-*.sh runner scripts (new model-freetoken-*.sh pattern)"

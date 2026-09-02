@@ -16,7 +16,7 @@ aliases: []
 tags: [doc/architecture/gdr]
 supersedes: []
 superseded-by: []
-related-to: ["adr-20260826-freetoken-runtime-amendment"]
+related-to: ["adr-20260826-freetoken-runtime-amendment", "adr-20260831-mac-studio-multi-host-deployment"]
 scope:
   impact-scope:
     - "model-*.sh runner scripts"
