@@ -15,7 +15,10 @@
     "github:levonk/levonk-packages#bundle-rtk-core": "",
     "github:levonk/levonk-packages#bundle-rtk-cloud": "",
     "github:levonk/smartfo": "",
-    "docker": ""
+    "docker": "",
+    "git-secrets": "",
+    "git-imerge": "",
+    "github:kunchenguid/treehouse": ""
   },
   "shell": {
     "create_venv": true,
