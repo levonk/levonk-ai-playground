@@ -62,6 +62,14 @@ DEFAULT_TENSOR_PARALLEL_SIZE=1
 DEFAULT_GPU_MEMORY_UTILIZATION=0.90
 DEFAULT_MAX_NUM_BATCHED_TOKENS=32768
 
+# KV cache dtype — set to "fp8" to enable FP8 KV cache quantization.
+# This halves KV cache memory usage, doubling concurrent session capacity
+# with minimal quality impact (~1-2 benchmark points vs BF16).
+# See internal-docs/guides/fp8-kv-cache.md for details.
+# Supported values: "" (auto/BF16), "fp8", "fp8_e4m3", "fp8_e5m2"
+# Note: SGLang support varies by version; vLLM supports fp8 directly.
+DEFAULT_KV_CACHE_DTYPE=""
+
 # =============================================================================
 # System Detection — auto-detect GPU/hardware type and pick a default runtime
 # =============================================================================
@@ -284,6 +292,9 @@ stop_existing_container() {
 #   vllm      → run_vllm_container()   (Docker)
 #   freetoken → run_freetoken()        (native Python, no Docker)
 #   mlx       → run_mlx()              (native Python, no Docker, Apple Silicon)
+#
+# For TTS/STT and other non-LLM services, model scripts call run_custom_container()
+# or run_native() directly instead of using this dispatcher.
 run_container() {
   case "$RUNTIME" in
     sglang)
@@ -321,11 +332,17 @@ run_sglang_container() {
   local tensor_parallel_size="${TENSOR_PARALLEL_SIZE:-$DEFAULT_TENSOR_PARALLEL_SIZE}"
   local gpu_memory_utilization="${GPU_MEMORY_UTILIZATION:-$DEFAULT_GPU_MEMORY_UTILIZATION}"
   local otlp_endpoint="${OTLP_TRACES_ENDPOINT:-}"
+  local kv_cache_dtype="${KV_CACHE_DTYPE:-$DEFAULT_KV_CACHE_DTYPE}"
 
   echo "Starting SGLang container for model: $account/$model"
   echo "Host Port: $host_port"
   echo "Tensor Parallel Size: $tensor_parallel_size"
   echo "Mem Fraction Static: $gpu_memory_utilization"
+  if [ -n "$kv_cache_dtype" ]; then
+    echo "KV Cache Dtype: $kv_cache_dtype"
+  else
+    echo "KV Cache Dtype: (auto/BF16)"
+  fi
   echo "Image: $SGLANG_IMAGE"
   if [ -n "$otlp_endpoint" ]; then
     echo "OTLP Traces Endpoint: $otlp_endpoint"
@@ -340,6 +357,15 @@ run_sglang_container() {
   if [ -n "$otlp_endpoint" ]; then
     otel_args+=(--otlp-traces-endpoint "$otlp_endpoint")
     otel_env+=(-e "OTEL_EXPORTER_OTLP_ENDPOINT=${otlp_endpoint}")
+  fi
+
+  # FP8 KV cache: SGLang support varies by version. If KV_CACHE_DTYPE is set,
+  # pass --kv-cache-dtype. If the SGLang version doesn't support it, the flag
+  # will be rejected and the container will fail to start — remove the env
+  # var or upgrade SGLang.
+  local -a kv_args=()
+  if [ -n "$kv_cache_dtype" ]; then
+    kv_args+=(--kv-cache-dtype "$kv_cache_dtype")
   fi
 
   docker run --rm --gpus all -p "$host_port:8000" \
@@ -361,6 +387,7 @@ run_sglang_container() {
     --tp "$tensor_parallel_size" \
     --mem-fraction-static "$gpu_memory_utilization" \
     "${otel_args[@]}" \
+    "${kv_args[@]}" \
     "${additional_args[@]}" \
     --model-path "$account/$model"
 }
@@ -384,6 +411,7 @@ run_vllm_container() {
   local flashinfer_moe="${VLLM_USE_FLASHINFER_MOE_FP16:-0}"
   local memory_profiler_cuda="${VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS:-0}"
   local otlp_endpoint="${OTLP_TRACES_ENDPOINT:-}"
+  local kv_cache_dtype="${KV_CACHE_DTYPE:-$DEFAULT_KV_CACHE_DTYPE}"
 
   echo "Starting vLLM container for model: $account/$model"
   echo "Host Port: $host_port"
@@ -391,6 +419,11 @@ run_vllm_container() {
   echo "GPU Memory Utilization: $gpu_memory_utilization"
   echo "FlashInfer MoE FP16: $flashinfer_moe"
   echo "Memory Profiler CUDA Graphs: $memory_profiler_cuda"
+  if [ -n "$kv_cache_dtype" ]; then
+    echo "KV Cache Dtype: $kv_cache_dtype"
+  else
+    echo "KV Cache Dtype: (auto/BF16)"
+  fi
   echo "Image: $VLLM_IMAGE"
   if [ -n "$otlp_endpoint" ]; then
     echo "OTLP Traces Endpoint: $otlp_endpoint"
@@ -405,6 +438,14 @@ run_vllm_container() {
   if [ -n "$otlp_endpoint" ]; then
     otel_args+=(--otlp-traces-endpoint "$otlp_endpoint")
     otel_env+=(-e "OTEL_EXPORTER_OTLP_ENDPOINT=${otlp_endpoint}")
+  fi
+
+  # FP8 KV cache: vLLM supports --kv-cache-dtype fp8 (and fp8_e4m3, fp8_e5m2).
+  # This halves KV cache memory, doubling concurrent session capacity.
+  # See internal-docs/guides/fp8-kv-cache.md for details.
+  local -a kv_args=()
+  if [ -n "$kv_cache_dtype" ]; then
+    kv_args+=(--kv-cache-dtype "$kv_cache_dtype")
   fi
 
   docker run --rm --gpus all -p "$host_port:8000" \
@@ -429,6 +470,7 @@ run_vllm_container() {
     --gpu-memory-utilization "$gpu_memory_utilization" \
     --max-num-batched-tokens "$max_num_batched_tokens" \
     "${otel_args[@]}" \
+    "${kv_args[@]}" \
     "${additional_args[@]}" \
     --model "$account/$model"
 }
@@ -546,4 +588,118 @@ run_mlx() {
     "${mlx_args[@]}" \
     "${additional_args[@]}" \
     "$account/$model"
+}
+
+# =============================================================================
+# Custom container runner (for non-LLM services: TTS, STT, etc.)
+# =============================================================================
+# Usage: run_custom_container <image> <container_name> <host_port> <cmd...>
+#
+# Runs a Docker container with GPU passthrough, cache volumes, and port
+# mapping — but with a caller-specified image and command. Used by
+# model-tts.sh and model-stt.sh for purpose-built Docker images that
+# don't fit the LLM runtime dispatch (SGLang/vLLM/FreeToken/MLX).
+#
+# The function provides the common Docker boilerplate:
+#   --gpus all              GPU passthrough (NVIDIA)
+#   --ipc=host              Shared memory for efficient GPU communication
+#   --shm-size 8g           Shared memory for model loading
+#   HF cache volumes        HuggingFace model cache mounted from host
+#   HF token env vars       HUGGING_FACE_HUB_TOKEN passed through
+#
+# The caller specifies:
+#   $1 — Docker image (e.g. "hwdsl2/kokoro-server:cuda")
+#   $2 — Container name (used for stop_existing_container)
+#   $3 — Host port (mapped to container's internal port via $CUSTOM_CONTAINER_PORT)
+#   $@ — Remaining args are the container's command (optional; most images
+#        have a default ENTRYPOINT/CMD)
+#
+# Environment variables:
+#   CUSTOM_CONTAINER_PORT  — internal container port (default: 8880 for TTS,
+#                            9000 for STT; set in the model script)
+#   CUSTOM_IMAGE           — override the image from the model script
+#   LOCAL_CACHE_DIR        — host cache directory (same as LLM runners)
+#   CONTAINER_CACHE_DIR    — container cache directory (same as LLM runners)
+#
+# On Apple Silicon, this function falls back to running without --gpus
+# (Docker on Mac doesn't support GPU passthrough; TTS/STT models are small
+# enough to run on CPU or via a native Python process instead).
+#
+run_custom_container() {
+  local image="$1"
+  local container_name="$2"
+  local host_port="$3"
+  shift 3
+  local cmd=("$@")
+
+  local local_cache_dir="${LOCAL_CACHE_DIR:-$DEFAULT_LOCAL_CACHE_DIR}"
+  local container_cache_dir="${CONTAINER_CACHE_DIR:-$DEFAULT_CONTAIN_CACHE_DIR}"
+  local internal_port="${CUSTOM_CONTAINER_PORT:-8880}"
+
+  # Allow image override via env var (useful for testing alternative images)
+  image="${CUSTOM_IMAGE:-$image}"
+
+  echo "Starting custom container: $container_name"
+  echo "Image: $image"
+  echo "Host Port: $host_port -> $internal_port"
+
+  local -a gpu_args=()
+  if [ "$(detect_system)" = "nvidia" ]; then
+    gpu_args+=(--gpus all)
+    nvidia-smi
+  else
+    echo "Note: No NVIDIA GPU detected. Running without GPU acceleration."
+    echo "TTS/STT models are small enough for CPU inference on most hardware."
+  fi
+
+  # Build the docker run command with common boilerplate.
+  # The HF cache volume lets the container reuse downloaded models
+  # instead of re-downloading on every start.
+  # The --shm-size is smaller than LLM runners (8g vs 32g) because
+  # TTS/STT models are much smaller and don't need as much shared memory.
+  docker run --rm \
+    "${gpu_args[@]}" \
+    -p "$host_port:$internal_port" \
+    --ipc=host \
+    --shm-size 8g \
+    --ulimit memlock=-1 \
+    --ulimit stack=67108864 \
+    -v "$local_cache_dir/huggingface:$container_cache_dir/huggingface" \
+    -e "HUGGING_FACE_HUB_TOKEN=${HUGGING_FACE_HUB_TOKEN:-}" \
+    -e "HF_TOKEN=${HUGGING_FACE_HUB_TOKEN:-}" \
+    --name "$container_name" \
+    "$image" \
+    "${cmd[@]}"
+}
+
+# =============================================================================
+# Native process runner (for TTS/STT on Apple Silicon or CPU-only systems)
+# =============================================================================
+# Usage: run_native <container_name> <host_port> <cmd...>
+#
+# Runs a native Python process (no Docker) for TTS/STT on systems where
+# Docker GPU passthrough isn't available (Apple Silicon, CPU-only hosts).
+# The caller provides the command to run; this function handles process
+# lifecycle (stop existing, start, wait).
+#
+# On Apple Silicon, TTS/STT models run via:
+#   - MPS (Metal Performance Shaders) for GPU acceleration, or
+#   - CPU (models are small enough for real-time CPU inference)
+#
+# The caller is responsible for installing the Python package and
+# providing the correct command. This function just manages the process.
+#
+run_native() {
+  local container_name="$1"
+  local host_port="$2"
+  shift 2
+  local cmd=("$@")
+
+  echo "Starting native process: $container_name"
+  echo "Port: $host_port"
+
+  # Run the command directly. The stop_existing_container() function
+  # (called by the model script before this) handles killing any
+  # previous instance.
+  exec "${cmd[@]}"
 }
