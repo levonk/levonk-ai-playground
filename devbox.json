@@ -1,24 +1,23 @@
 {
-  "name": "levonk-ai-playground",
-  "version": "0.1.0",
+  "name":        "levonk-ai-playground",
+  "version":     "0.1.0",
   "description": "A Model Deployment Playground",
   "packages": {
-    "git": "",
-    "just": "",
-    "shellcheck": "",
-    "python315": "",
-    "python3.pkgs.huggingface-hub": "",
-    "python3.pkgs.ray": "",
-    "github:AlexsJones/llmfit": "",
+    "git":                                                        "",
+    "just":                                                       "",
+    "shellcheck":                                                 "",
+    "python315":                                                  "",
+    "python3.pkgs.huggingface-hub":                               "",
+    "python3.pkgs.ray":                                           "",
+    "github:AlexsJones/llmfit":                                   "",
     "github:levonk/levonk-packages#devbox-rtk-nodejs-pnpm-force": "",
-    "github:levonk/levonk-packages#devbox-rtk-python-uv-force": "",
-    "github:levonk/levonk-packages#bundle-rtk-core": "",
-    "github:levonk/levonk-packages#bundle-rtk-cloud": "",
-    "github:levonk/smartfo": "",
-    "docker": "",
-    "git-secrets": "",
-    "git-imerge": "",
-    "github:kunchenguid/treehouse": ""
+    "github:levonk/levonk-packages#devbox-rtk-python-uv-force":   "",
+    "github:levonk/levonk-packages#bundle-rtk-core":              "",
+    "github:levonk/levonk-packages#bundle-rtk-cloud":             "",
+    "github:levonk/smartfo":                                      "",
+    "docker":                                                     "",
+    "git-imerge":                                                 "",
+    "github:kunchenguid/treehouse":                               ""
   },
   "shell": {
     "create_venv": true,
@@ -28,19 +27,19 @@
   },
   "scripts": {
     "bootstrap": "just bootstrap-internal",
-    "doctor": "just doctor-internal",
-    "clean": "just clean-internal",
-    "build": "just build-internal",
-    "lint": "just lint-internal",
-    "test": "just test-internal",
+    "doctor":    "just doctor-internal",
+    "clean":     "just clean-internal",
+    "build":     "just build-internal",
+    "lint":      "just lint-internal",
+    "test":      "just test-internal",
     "typecheck": "just typecheck-internal",
-    "dev": "just dev-internal",
-    "debug": "just debug-internal",
-    "install": "just install-internal",
-    "release": "just release-internal"
+    "dev":       "just dev-internal",
+    "debug":     "just debug-internal",
+    "install":   "just install-internal",
+    "release":   "just release-internal"
   },
   "env": {
-    "RUST_LOG": "info",
+    "RUST_LOG":       "info",
     "RUST_BACKTRACE": "1"
   }
 }

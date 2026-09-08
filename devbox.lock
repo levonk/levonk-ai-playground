@@ -9,6 +9,10 @@
       "resolved": "github:NixOS/nixpkgs/d233902339c02a9c334e7e593de68855ad26c4cb?narHash=sha256-30sZNZoA1cqF5JNO9fVX%2BwgiQYjB7HJqqJ4ztCDeBZE%3D#git",
       "source": "nixpkg"
     },
+    "git-imerge": {
+      "resolved": "github:NixOS/nixpkgs/3d46470bb3030020f7e1361f33514854f5bfa86d#git-imerge",
+      "source": "nixpkg"
+    },
     "github:AlexsJones/llmfit": {
       "last_modified": "2026-05-20T08:06:35Z",
       "resolved": "github:AlexsJones/llmfit/051bbbc284fb30e80ca48249409f9fddef502556?lastModified=1779264395&narHash=sha256-MBvRJpmlWaabqzNAMBZHyX4KoSF7IfHkZ3MnSSQrqfU%3D"
@@ -30,8 +34,12 @@
       "source": "nixpkg"
     },
     "python315": {
-      "plugin_version": "0.0.4",
+      "plugin_version": "0.0.5",
       "resolved": "github:NixOS/nixpkgs/d233902339c02a9c334e7e593de68855ad26c4cb?narHash=sha256-30sZNZoA1cqF5JNO9fVX%2BwgiQYjB7HJqqJ4ztCDeBZE%3D#python315",
+      "source": "nixpkg"
+    },
+    "shellcheck": {
+      "resolved": "github:NixOS/nixpkgs/3d46470bb3030020f7e1361f33514854f5bfa86d#shellcheck",
       "source": "nixpkg"
     }
   }
