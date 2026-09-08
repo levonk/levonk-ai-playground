@@ -1,0 +1,33 @@
+{
+  "name": "Finishing Pipeline — Frame Interpolation + Upscale + Encode",
+  "description": "Post-generation finishing: RIFE frame interpolation, Real-ESRGAN upscale, color correction, H.264/H.265 encode",
+  "nodes": [
+    {
+      "id": "video_input",
+      "type": "VHS_LoadVideo",
+      "title": "Load Generated MP4",
+      "widgets": { "video": "wan_i2v_output_00001.mp4" }
+    },
+    {
+      "id": "frame_interp",
+      "type": "RIFE VFI",
+      "title": "RIFE Frame Interpolation",
+      "inputs": { "images": ["video_input", 0] },
+      "widgets": { "multiplier": 2, "rate": 24 }
+    },
+    {
+      "id": "upscale",
+      "type": "RealESRGAN_Upscale",
+      "title": "Real-ESRGAN Video Upscale",
+      "inputs": { "images": ["frame_interp", 0] },
+      "widgets": { "model_name": "RealESRGAN_x4plus.pth", "scale": 2 }
+    },
+    {
+      "id": "video_combine",
+      "type": "VHS_VideoCombine",
+      "title": "Encode H.264",
+      "inputs": { "images": ["upscale", 0] },
+      "widgets": { "frame_rate": 24, "format": "h264", "save_metadata": true, "filename_prefix": "finished_output" }
+    }
+  ]
+}

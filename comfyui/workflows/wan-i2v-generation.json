@@ -1,0 +1,72 @@
+{
+  "name": "Wan 2.2 I2V — Character Keyframe to Video",
+  "description": "Generate a short video clip from a keyframe image using Wan 2.2 14B I2V with character LoRA + reference conditioning",
+  "nodes": [
+    {
+      "id": "checkpoint_loader",
+      "type": "CheckpointLoaderSimple",
+      "title": "Load SDXL/Flux Checkpoint",
+      "widgets": { "ckpt_name": "sd_xl_base_1.0.safetensors" }
+    },
+    {
+      "id": "lora_loader",
+      "type": "LoraLoader",
+      "title": "Load Character LoRA",
+      "inputs": { "model": ["checkpoint_loader", 0], "clip": ["checkpoint_loader", 1] },
+      "widgets": { "lora_name": "character_lora.safetensors", "strength_model": 0.8, "strength_clip": 0.8 }
+    },
+    {
+      "id": "reference_image_load",
+      "type": "LoadImage",
+      "title": "Load Reference Image",
+      "widgets": { "image": "reference.png" }
+    },
+    {
+      "id": "ip_adapter",
+      "type": "IPAdapterApply",
+      "title": "Reference Image Conditioning",
+      "inputs": { "model": ["lora_loader", 0], "image": ["reference_image_load", 0] },
+      "widgets": { "weight": 0.7, "noise": 0.1 }
+    },
+    {
+      "id": "keyframe_load",
+      "type": "LoadImage",
+      "title": "Load Keyframe Image",
+      "widgets": { "image": "keyframe.png" }
+    },
+    {
+      "id": "positive_prompt",
+      "type": "CLIPTextEncode",
+      "title": "Positive Prompt (motion only)",
+      "inputs": { "clip": ["lora_loader", 1] },
+      "widgets": { "text": "She walks slowly toward the camera, her jacket moving naturally, subtle confident expression, gentle handheld camera movement, continuous motion, realistic body mechanics" }
+    },
+    {
+      "id": "negative_prompt",
+      "type": "CLIPTextEncode",
+      "title": "Negative Prompt",
+      "inputs": { "clip": ["lora_loader", 1] },
+      "widgets": { "text": "blurry, distorted, extra limbs, deformed, watermark, text, low quality, jpeg artifacts, flickering, inconsistent identity" }
+    },
+    {
+      "id": "wan_i2v",
+      "type": "WanVideoWrapperI2V",
+      "title": "Wan 2.2 I2V Model",
+      "inputs": { "model": ["ip_adapter", 0], "positive": ["positive_prompt", 0], "negative": ["negative_prompt", 0], "image": ["keyframe_load", 0] },
+      "widgets": { "resolution": "640x640", "frames": 49, "batch_size": 1, "precision": "bf16", "motion_strength": 0.7, "seed": 42 }
+    },
+    {
+      "id": "vae_decode",
+      "type": "VAEDecode",
+      "title": "VAE Decode",
+      "inputs": { "samples": ["wan_i2v", 0], "vae": ["checkpoint_loader", 2] }
+    },
+    {
+      "id": "video_combine",
+      "type": "VHS_VideoCombine",
+      "title": "Save MP4",
+      "inputs": { "images": ["vae_decode", 0] },
+      "widgets": { "frame_rate": 16, "format": "h264", "save_metadata": true, "filename_prefix": "wan_i2v_output" }
+    }
+  ]
+}
