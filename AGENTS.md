@@ -13,21 +13,23 @@ date:
 
 | Field | Value |
 |-------|-------|
-| Project name | levonk-ai-playground (vLLM Model Runner Scripts) |
+| Project name | levonk-ai-playground (LLM Model Runner Scripts) |
 | Type | Flat single-project repo (not a monorepo) |
-| Category | Shell-script vLLM model deployment playground |
+| Category | Shell-script LLM/TTS/STT model deployment playground |
 | Language | Bash |
-| Runtime | Docker containers on NVIDIA GB10 128GB, CUDA |
+| Runtime | SGLang, FreeToken, vLLM (Docker on NVIDIA), MLX (native on Apple Silicon) |
 | Repository | https://github.com/levonk/levonk-ai-playground |
 | README | [`README.md`](README.md) — architecture rationale, model table, env-var reference |
 
 ## Project Overview
 
-A playground for deploying vLLM-served LLMs in Docker containers on a single
-NVIDIA GB10 128GB machine. The repo tracks top-performing models from
+A playground for deploying LLMs (and TTS/STT models) via multiple inference
+runtimes (SGLang, FreeToken, vLLM, MLX) on NVIDIA GPUs and Apple Silicon.
+The repo tracks top-performing models from
 [llmfit](https://github.com/AlexsJones/llmfit) and provides one script per
 model plus a shared library. Each model binds a unique host port so multiple
-models run simultaneously. The audience is the operator running the GPU box.
+models run simultaneously. The audience is the operator running the GPU box
+or Mac.
 
 ## Install
 
@@ -35,23 +37,28 @@ This project has no package-manager install step. An operator deploys it by
 cloning onto the GPU host and running a model script.
 
 **Prerequisites on the GPU host:**
-- NVIDIA GB10 (128 GB) with CUDA
+- NVIDIA GB10 (128 GB) with CUDA (primary target)
 - Docker with NVIDIA Container Toolkit (`--gpus all` works)
 - `sudo` (cache clearing uses `/proc/sys/vm/drop_caches`)
 - `jq` (optional — test scripts fall back to `sed`)
+
+**Prerequisites on Apple Silicon Mac:**
+- Apple Silicon Mac (M1+) with macOS 14+
+- `pip install vllm-mlx` (for MLX runtime)
 
 **Deploy:**
 ```bash
 git clone git@github.com:levonk/levonk-ai-playground.git
 cd levonk-ai-playground
 printf 'HUGGING_FACE_HUB_TOKEN=hf_xxx\n' > .env   # required for private models
-./model-chat.sh                                    # starts vLLM on host port 8000
+./model-chat.sh                                    # starts SGLang/vLLM on host port 8000
 ```
 
-Each `model-*.sh` pulls `nvcr.io/nvidia/vllm:26.04-py3` and starts the
-OpenAI-compatible vLLM server on the script's host port. Smoke-test a running
-server with `./test-query.sh` (auto-discovers Docker LLM containers) or
-`./test-query-local.sh` (targets a remote host).
+Each `model-*.sh` auto-detects the system and selects the appropriate
+runtime (SGLang, FreeToken, vLLM, or MLX). Docker-based runtimes pull the
+pinned image and start an OpenAI-compatible server on the script's host
+port. Smoke-test a running server with `./test-query.sh` (auto-discovers
+Docker LLM containers) or `./test-query-local.sh` (targets a remote host).
 
 ## JIT Index
 
@@ -60,6 +67,8 @@ guide is the single deeper doc.
 
 - Developer Guide: [`.agents/knowledge/developer.md`](.agents/knowledge/developer.md) — Setup, commands, environment, workflow, repo structure, patterns, boundaries, gotchas, and Definition of Done for anyone editing the scripts
 - Workflow: [`.agents/workflow/aiplayground-git.md`](.agents/workflow/aiplayground-git.md) — Points at the git-repository-management skill for this repo
+- Platform Reference: [`internal-docs/platforms/INDEX.md`](internal-docs/platforms/INDEX.md) — Hardware-specific deployment guides (GB10, Apple Silicon, multi-GPU PCIe, HGX/NVLink)
+- General Guides: [`internal-docs/guides/INDEX.md`](internal-docs/guides/INDEX.md) — KV cache planning, FP8 KV cache, co-location budget, tensor parallelism, model identifiers, quantization, lite models, SSD wear, networking
 
 ## Knowledge Bundles
 
@@ -94,7 +103,7 @@ These are negative findings — do NOT implement any approach listed there.
 
 - **License**: Treat as private/internal unless a LICENSE file is added.
 - **Secrets**: Never commit `.env` or any `HUGGING_FACE_HUB_TOKEN` value. `.env` is gitignored.
-- **Hardware target**: Scripts assume NVIDIA GB10 128GB. Flags (GPU memory utilization, tensor parallel size, quantization) are tuned for that card. Do not assume they generalize to other GPUs without re-tuning.
+- **Hardware target**: Scripts auto-detect the system and select appropriate models/runtimes. The primary target is NVIDIA GB10 128GB — flags (GPU memory utilization, tensor parallel size, quantization) are tuned for that card. Apple Silicon, multi-GPU PCIe, and HGX/NVLink are supported via per-system configuration in each script. See [`internal-docs/platforms/`](internal-docs/platforms/INDEX.md) for platform-specific guidance. Do not assume GB10-tuned flags generalize without re-tuning.
 
 ## Agent Interaction Protocol
 
