@@ -66,10 +66,10 @@ Only when a single model doesn't fit on one GPU:
 
 ```bash
 # 405B model on 4 GPUs (NVLink recommended)
-TENSOR_PARALLEL_SIZE=4 ./model-chat.sh
+TENSOR_PARALLEL_SIZE=4 ./scripts/model-chat.sh
 
 # 70B model on 2 GPUs (PCIe, but model needs >96 GB for weights+KV)
-TENSOR_PARALLEL_SIZE=2 ./model-chat.sh
+TENSOR_PARALLEL_SIZE=2 ./scripts/model-chat.sh
 ```
 
 On NVLink systems, TP>1 is efficient. On PCIe systems, TP>1 works but adds

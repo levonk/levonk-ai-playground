@@ -45,26 +45,26 @@ themselves.
 
 **Deploy a model:**
 ```bash
-./model-chat.sh       # Qwen3-Next-80B-A3B-Instruct-AWQ-4bit  -> host port 8000
-./model-code.sh       # Qwen3-Coder-Next-AWQ-4bit             -> host port 8001
-./model-reason.sh     # Qwen3.5-35B reasoning-distilled        -> host port 8002
-./model-general.sh    # Qwen3-Next-80B-A3B-Thinking-AWQ-4bit  -> host port 8003
+./scripts/model-chat.sh       # Qwen3-Next-80B-A3B-Instruct-AWQ-4bit  -> host port 8000
+./scripts/model-code.sh       # Qwen3-Coder-Next-AWQ-4bit             -> host port 8001
+./scripts/model-reason.sh     # Qwen3.5-35B reasoning-distilled        -> host port 8002
+./scripts/model-general.sh    # Qwen3-Next-80B-A3B-Thinking-AWQ-4bit  -> host port 8003
 ```
 
 **Smoke-test a running server:**
 ```bash
-./test-query.sh                       # auto-discovers running LLM Docker containers
-./test-query.sh 'hello world'         # custom prompt, all containers
-./test-query.sh -p 8002 -m qwen3 'hi' # single port, explicit model
-./test-query-local.sh                 # targets remote host `ai` port 8002
+./scripts/test-query.sh                       # auto-discovers running LLM Docker containers
+./scripts/test-query.sh 'hello world'         # custom prompt, all containers
+./scripts/test-query.sh -p 8002 -m qwen3 'hi' # single port, explicit model
+./scripts/test-query-local.sh                 # targets remote host `ai` port 8002
 ```
 
-**Override a model script via env vars** (see `vllm-runner-lib.sh` defaults):
+**Override a model script via env vars** (see `libexec/runner-lib.sh` defaults):
 ```bash
-HOST_PORT=9000 ./model-chat.sh
-MODEL=custom-model ACCT=my-account ./model-chat.sh
-GPU_MEMORY_UTILIZATION=0.95 TENSOR_PARALLEL_SIZE=2 ./model-chat.sh
-OTLP_TRACES_ENDPOINT=http://openlit:4318 ./model-chat.sh   # enable OTLP tracing
+HOST_PORT=9000 ./scripts/model-chat.sh
+MODEL=custom-model ACCT=my-account ./scripts/model-chat.sh
+GPU_MEMORY_UTILIZATION=0.95 TENSOR_PARALLEL_SIZE=2 ./scripts/model-chat.sh
+OTLP_TRACES_ENDPOINT=http://openlit:4318 ./scripts/model-chat.sh   # enable OTLP tracing
 ```
 
 ## Tech Stack / Environment
@@ -80,7 +80,7 @@ OTLP_TRACES_ENDPOINT=http://openlit:4318 ./model-chat.sh   # enable OTLP tracing
 
 1. Branch from `main`: `feature/{name}`, `fix/{name}`, or `chore/{name}`
 2. Edit the script(s); follow the shared-library pattern (see Patterns)
-3. Smoke-test on the GPU box: run the affected `model-*.sh`, then `./test-query.sh`
+3. Smoke-test on the GPU box: run the affected `model-*.sh`, then `./scripts/test-query.sh`
 4. Commit with a conventional message (`feat(model):`, `fix(lib):`, `chore(model):`)
 5. Rebase on `main` if diverged
 6. Open a PR
@@ -90,7 +90,9 @@ model script and confirm the vLLM server responds via `test-query.sh`.
 
 ## Key Directories
 
-- `./` (root) — all model runner scripts and the shared library live flat at the repo root
+- `scripts/` — user-facing entrypoints: all `model-*.sh` runners and the `test-query*.sh` tools
+- `libexec/` — internals never called directly: `runner-lib.sh` (shared library) and `system-one-server.py` (scorer service)
+- `tests/` — endpoint-specific smoke tests (e.g. `test-system-one.sh` for the non-chat scorer)
 - `.agents/workflow/` — workflow pointers (e.g., the git-repository-management skill trigger)
 - `.agents/knowledge/` — this developer guide
 - `.devbox/` — devbox-generated artifacts (gitignored, do not commit)
@@ -99,10 +101,11 @@ model script and confirm the vLLM server responds via `test-query.sh`.
 ## Key Files
 
 **Scripts:**
-- `vllm-runner-lib.sh` — shared library; every `model-*.sh` sources this. Provides `load_env`, `check_prerequisites`, `setup_huggingface`, `clear_caches`, `stop_existing_container`, `run_vllm_container`
-- `model-*.sh` — one runner per model. Sets `ACCT`, `MODEL`, `HOST_PORT`, optional vLLM flags, then calls `run_vllm_container`
-- `test-query.sh` — auto-discovers Docker LLM containers and POSTs an OpenAI-style chat completion to each
-- `test-query-local.sh` — targets a single remote OpenAI-compatible endpoint (no Docker discovery)
+- `libexec/runner-lib.sh` — shared library; every `scripts/model-*.sh` sources this. Provides `load_env`, `check_prerequisites`, `setup_huggingface`, `clear_caches`, `stop_existing_container`, `run_vllm_container`
+- `scripts/model-*.sh` — one runner per model. Sets `ACCT`, `MODEL`, `HOST_PORT`, optional vLLM flags, then calls `run_vllm_container`
+- `scripts/test-query.sh` — auto-discovers Docker LLM containers and POSTs an OpenAI-style chat completion to each
+- `scripts/test-query-local.sh` — targets a single remote OpenAI-compatible endpoint (no Docker discovery)
+- `tests/test-system-one.sh` — smoke-tests the System One scorer's `/score` endpoint
 
 **Config:**
 - `devbox.json` — Nix/devbox environment declaration
@@ -117,8 +120,8 @@ model script and confirm the vLLM server responds via `test-query.sh`.
 ## Patterns
 
 **Shared library pattern (DRY):**
-- ✅ DO put shared Docker/vLLM logic in `vllm-runner-lib.sh`
-- ✅ DO source the library at the top of every `model-*.sh`: `source "$SCRIPT_DIR/vllm-runner-lib.sh"`
+- ✅ DO put shared Docker/vLLM logic in `libexec/runner-lib.sh`
+- ✅ DO source the library at the top of every `model-*.sh`: `source "$REPO_ROOT/libexec/runner-lib.sh"`
 - ✅ DO keep each `model-*.sh` thin: set `ACCT`/`MODEL`/`HOST_PORT` and model-specific flags, then call `run_vllm_container`
 - ✅ DO use a unique `HOST_PORT` per model so models run simultaneously
 - ✅ DO use `set -euo pipefail` in every script
@@ -130,8 +133,9 @@ model script and confirm the vLLM server responds via `test-query.sh`.
 #!/usr/bin/env bash
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=./vllm-runner-lib.sh
-source "$SCRIPT_DIR/vllm-runner-lib.sh"
+# shellcheck source=../libexec/runner-lib.sh
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+source "$REPO_ROOT/libexec/runner-lib.sh"
 ACCT="${ACCT:-your-account}"
 MODEL="${MODEL:-your-model-name}"
 HOST_PORT="${HOST_PORT:-8004}"  # pick a free port
@@ -146,12 +150,12 @@ main "$@"
 **Env-var overrides:** All tunable values (`HOST_PORT`, `MODEL`, `ACCT`,
 `GPU_MEMORY_UTILIZATION`, `TENSOR_PARALLEL_SIZE`, `MAX_NUM_BATCHED_TOKENS`,
 `LOCAL_CACHE_DIR`, `CONTAINER_CACHE_DIR`, `OTLP_TRACES_ENDPOINT`) read from
-env with defaults in `vllm-runner-lib.sh`. Keep this pattern for new knobs.
+env with defaults in `libexec/runner-lib.sh`. Keep this pattern for new knobs.
 
 ## Boundaries
 
 ### Always
-- Source `vllm-runner-lib.sh` from every `model-*.sh`
+- Source `libexec/runner-lib.sh` from every `model-*.sh`
 - Use `set -euo pipefail` in every script
 - Pick a unique `HOST_PORT` for any new model script
 - Keep the shared library the single source of Docker/vLLM run logic
@@ -168,7 +172,7 @@ env with defaults in `vllm-runner-lib.sh`. Keep this pattern for new knobs.
 - Hardcode a HF token in a script
 - Run `docker run` without `--rm` (the library always uses `--rm`; leaving containers around breaks `stop_existing_container` assumptions)
 - Assume flags tuned for GB10 generalize to other GPUs without re-tuning
-- Bypass `vllm-runner-lib.sh` and inline Docker run logic in a model script
+- Bypass `libexec/runner-lib.sh` and inline Docker run logic in a model script
 
 ## Known Gotchas
 
@@ -185,9 +189,9 @@ env with defaults in `vllm-runner-lib.sh`. Keep this pattern for new knobs.
 A change to a runner or the library is done when:
 
 - [ ] The affected `model-*.sh` runs on the GPU box without manual intervention
-- [ ] `./test-query.sh` returns HTTP 200 from the deployed container
+- [ ] `./scripts/test-query.sh` returns HTTP 200 from the deployed container
 - [ ] No new host port collides with an existing `model-*.sh`
-- [ ] Shared logic was extended in `vllm-runner-lib.sh`, not duplicated in the runner
+- [ ] Shared logic was extended in `libexec/runner-lib.sh`, not duplicated in the runner
 - [ ] `.env` and any token values are absent from the diff
 - [ ] The README model table and env-var list still match the scripts (or are updated)
 - [ ] The closest `AGENTS.md` chain was re-read and any stale text removed

@@ -83,25 +83,25 @@ simultaneously, each pinned to a different GPU via `CUDA_VISIBLE_DEVICES`:
 
 ```bash
 # GPU 0: chat model
-CUDA_VISIBLE_DEVICES=0 ./model-chat.sh
+CUDA_VISIBLE_DEVICES=0 ./scripts/model-chat.sh
 
 # GPU 1: code model
-CUDA_VISIBLE_DEVICES=1 ./model-code.sh
+CUDA_VISIBLE_DEVICES=1 ./scripts/model-code.sh
 
 # GPU 2: reasoning model
-CUDA_VISIBLE_DEVICES=2 ./model-reason.sh
+CUDA_VISIBLE_DEVICES=2 ./scripts/model-reason.sh
 
 # GPU 3: general/thinking model
-CUDA_VISIBLE_DEVICES=3 ./model-general.sh
+CUDA_VISIBLE_DEVICES=3 ./scripts/model-general.sh
 
 # GPU 4: lite model
-CUDA_VISIBLE_DEVICES=4 ./model-lite.sh
+CUDA_VISIBLE_DEVICES=4 ./scripts/model-lite.sh
 
 # GPU 5: TTS
-CUDA_VISIBLE_DEVICES=5 ./model-tts.sh
+CUDA_VISIBLE_DEVICES=5 ./scripts/model-tts.sh
 
 # GPU 6: STT
-CUDA_VISIBLE_DEVICES=6 ./model-stt.sh
+CUDA_VISIBLE_DEVICES=6 ./scripts/model-stt.sh
 
 # GPU 7: spare / additional model
 ```
@@ -150,7 +150,7 @@ causes severe latency spikes.
 For TP>1 on this repo's scripts:
 
 ```bash
-TENSOR_PARALLEL_SIZE=2 ./model-chat.sh
+TENSOR_PARALLEL_SIZE=2 ./scripts/model-chat.sh
 ```
 
 But remember: TP>1 on PCIe introduces AllReduce latency. Only use it when the

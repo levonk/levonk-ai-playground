@@ -32,8 +32,9 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=./runner-lib.sh
-source "$SCRIPT_DIR/runner-lib.sh"
+# shellcheck source=../libexec/runner-lib.sh
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+source "$REPO_ROOT/libexec/runner-lib.sh"
 
 # Per-system model configuration
 configure_model() {

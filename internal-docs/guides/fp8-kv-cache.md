@@ -31,7 +31,7 @@ run_container "$ACCT" "$MODEL" "$HOST_PORT" \
 # Or via environment variable:
 # The runner-lib.sh passes additional_args through to vLLM, so you can
 # set it in the model script or override at runtime:
-KV_CACHE_DTYPE=fp8 ./model-chat.sh
+KV_CACHE_DTYPE=fp8 ./scripts/model-chat.sh
 ```
 
 vLLM also supports `fp8_e5m2` and `fp8_e4m3` variants. The default `fp8`

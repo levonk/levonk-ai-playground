@@ -51,18 +51,21 @@ cloning onto the GPU host and running a model script.
 git clone git@github.com:levonk/levonk-ai-playground.git
 cd levonk-ai-playground
 printf 'HUGGING_FACE_HUB_TOKEN=hf_xxx\n' > .env   # required for private models
-./model-chat.sh                                    # starts SGLang/vLLM on host port 8000
+./scripts/model-chat.sh                                    # starts SGLang/vLLM on host port 8000
 ```
 
-Each `model-*.sh` auto-detects the system and selects the appropriate
+Each `scripts/model-*.sh` auto-detects the system and selects the appropriate
 runtime (SGLang, FreeToken, vLLM, or MLX). Docker-based runtimes pull the
 pinned image and start an OpenAI-compatible server on the script's host
-port. Smoke-test a running server with `./test-query.sh` (auto-discovers
-Docker LLM containers) or `./test-query-local.sh` (targets a remote host).
+port. Smoke-test a running server with `./scripts/test-query.sh` (auto-discovers
+Docker LLM containers) or `./scripts/test-query-local.sh` (targets a remote host).
 
 ## JIT Index
 
-This is a flat repo. There are no sub-package `AGENTS.md` files. The developer
+Layout: `scripts/` holds the user-facing entrypoints (`model-*.sh`,
+`test-query*.sh`), `libexec/` holds internals they call (`runner-lib.sh`,
+`system-one-server.py`), and `tests/` holds endpoint-specific smoke tests.
+There are no sub-package `AGENTS.md` files. The developer
 guide is the single deeper doc.
 
 - Developer Guide: [`.agents/knowledge/developer.md`](.agents/knowledge/developer.md) — Setup, commands, environment, workflow, repo structure, patterns, boundaries, gotchas, and Definition of Done for anyone editing the scripts

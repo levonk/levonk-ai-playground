@@ -25,7 +25,7 @@ set -euo pipefail
 # Individual scripts can override by exporting RUNTIME before sourcing this
 # file, e.g.:
 #
-#     RUNTIME=vllm source "$SCRIPT_DIR/runner-lib.sh"
+#     RUNTIME=vllm source "$REPO_ROOT/libexec/runner-lib.sh"
 #
 # Per ADR-202608021744 (amended):
 #   - SGLang is the default for in-VRAM dense models on GB10
@@ -170,9 +170,17 @@ fi
 # The script's main() calls configure_model() before run_container().
 # =============================================================================
 
-# Load environment variables from .env if it exists
+# Load environment variables from .env if it exists. Looks in the repo root
+# (this file's parent directory) first so scripts/ entrypoints work from any
+# working directory, then falls back to the caller's cwd.
 load_env() {
-  if [ -f .env ]; then
+  local lib_dir env_file
+  lib_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  env_file="$lib_dir/../.env"
+  if [ -f "$env_file" ]; then
+    # shellcheck source=/dev/null
+    source "$env_file"
+  elif [ -f .env ]; then
     # shellcheck source=/dev/null
     source .env
   fi

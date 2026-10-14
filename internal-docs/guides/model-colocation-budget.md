@@ -75,21 +75,21 @@ With 8 GPUs, multiply concurrent sessions by 8. See
 
 ```bash
 # Terminal 1: Chat model (port 8000, ~45 GB)
-./model-chat.sh
+./scripts/model-chat.sh
 
 # Terminal 2: Code model (port 8001, ~45 GB)
 # Note: 45+45 = 90 GB, leaves ~32 GB for KV cache split across both
-./model-code.sh
+./scripts/model-code.sh
 
 # Terminal 3: Lite model (port 8004, ~2.5 GB)
 # Tiny footprint, runs alongside anything
-./model-lite.sh
+./scripts/model-lite.sh
 
 # Terminal 4: TTS (port 8005, ~0.3 GB)
-./model-tts.sh
+./scripts/model-tts.sh
 
 # Terminal 5: STT (port 8006, ~3 GB)
-./model-stt.sh
+./scripts/model-stt.sh
 ```
 
 Total: ~95.8 GB weights, ~26 GB for KV cache. Feasible but tight. If you

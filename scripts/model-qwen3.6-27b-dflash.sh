@@ -1,6 +1,6 @@
 # https://catalog.ngc.nvidia.com/orgs/nvidia/containers/vllm
 #
-source ~/.local/bin/.env
+source ~/.local/scripts/.env
 
 # Authorize with hf
 if [ "x$HUGGING_FACE_HUB_TOKEN" != "x" ]; then

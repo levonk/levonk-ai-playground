@@ -42,7 +42,7 @@ forward pass, this is the difference between usable and unusable sharding.
 For models that don't fit on a single GPU:
 
 ```bash
-TENSOR_PARALLEL_SIZE=8 ./model-chat.sh
+TENSOR_PARALLEL_SIZE=8 ./scripts/model-chat.sh
 ```
 
 On NVLink, TP=8 is efficient. The model's layers are split across all 8 GPUs,
@@ -54,8 +54,8 @@ For serving multiple 70B–27B models concurrently, use TP=1 per model and
 pin each to a different GPU (same as the PCIe multi-GPU strategy):
 
 ```bash
-CUDA_VISIBLE_DEVICES=0 ./model-chat.sh
-CUDA_VISIBLE_DEVICES=1 ./model-code.sh
+CUDA_VISIBLE_DEVICES=0 ./scripts/model-chat.sh
+CUDA_VISIBLE_DEVICES=1 ./scripts/model-code.sh
 # ...
 ```
 
@@ -63,13 +63,13 @@ CUDA_VISIBLE_DEVICES=1 ./model-code.sh
 
 ```bash
 # GPUs 0-3: sharded 405B model
-CUDA_VISIBLE_DEVICES=0,1,2,3 TENSOR_PARALLEL_SIZE=4 ./model-chat.sh
+CUDA_VISIBLE_DEVICES=0,1,2,3 TENSOR_PARALLEL_SIZE=4 ./scripts/model-chat.sh
 
 # GPU 4: code model (TP=1)
-CUDA_VISIBLE_DEVICES=4 ./model-code.sh
+CUDA_VISIBLE_DEVICES=4 ./scripts/model-code.sh
 
 # GPU 5: lite model (TP=1)
-CUDA_VISIBLE_DEVICES=5 ./model-lite.sh
+CUDA_VISIBLE_DEVICES=5 ./scripts/model-lite.sh
 ```
 
 ## Runtime selection
