@@ -8,8 +8,9 @@ Primarily tracks top performers from https://github.com/AlexsJones/llmfit for Nv
 
 This project uses a **shared library pattern** for DRY (Don't Repeat Yourself) code organization:
 
-- **`runner-lib.sh`** - Shared library with common functions
-- **`model-*.sh`** - Model-specific runner scripts that source the library
+- **`scripts/`** — user-facing entrypoints: one `model-*.sh` runner per model, plus the `test-query*.sh` smoke-test tools
+- **`libexec/`** — internals, never called directly: `runner-lib.sh` (shared library every runner sources) and `system-one-server.py` (the scorer service)
+- **`tests/`** — smoke tests for endpoints the generic test-query tools can't exercise (e.g. `test-system-one.sh` for the scorer)
 
 ### Why Shell Library Instead of Ansible?
 
@@ -33,7 +34,7 @@ For this use case (local development playground, single-machine Docker deploymen
 
 Each model runs on a unique host port to allow simultaneous deployment:
 
-| Script | Model | Account | Host Port | VRAM | Special Config |
+| Script (in `scripts/`) | Model | Account | Host Port | VRAM | Special Config |
 |--------|-------|---------|-----------|------|----------------|
 | `model-chat.sh` | Qwen3-Next-80B-A3B-Instruct-AWQ-4bit | cyankiwi | 8000 | ~45 GB | `--quantization awq_merlin` |
 | `model-code.sh` | Qwen3-Coder-Next-AWQ-4bit | cyankiwi | 8001 | ~45 GB | `--quantization awq_merlin` |
@@ -42,6 +43,7 @@ Each model runs on a unique host port to allow simultaneous deployment:
 | `model-lite.sh` | Qwen3-4B-Instruct-AWQ-4bit | Qwen | 8004 | ~2.5 GB | Lightweight companion for simple tasks |
 | `model-tts.sh` | Kokoro-82M | hwdsl2 | 8005 | ~0.3 GB | OpenAI-compatible `/v1/audio/speech` |
 | `model-stt.sh` | Whisper large-v3-turbo | hwdsl2 | 8006 | ~1.5 GB | OpenAI-compatible `/v1/audio/transcriptions` |
+| `model-system-one.sh` | system-one-qwen3.5-4b-scorer-v2b (LoRA on Qwen3.5-4B-Base) | pngwn | 8007 | ~9 GB bf16 | Native Python scorer (torch+PEFT), `POST /score` — not a chat endpoint |
 
 VRAM figures are approximate for AWQ-4bit / GPTQ-int4 quantization on the
 NVIDIA GB10 128GB. See [`internal-docs/platforms/`](internal-docs/platforms/INDEX.md)
@@ -55,13 +57,14 @@ for which models can run simultaneously.
 Run a specific model:
 
 ```bash
-./model-chat.sh        # 80B chat model (port 8000)
-./model-code.sh        # 80B code model (port 8001)
-./model-reason.sh      # 35B reasoning model (port 8002)
-./model-general.sh     # 80B thinking model (port 8003)
-./model-lite.sh        # 4B lightweight model (port 8004)
-./model-tts.sh         # Kokoro TTS (port 8005)
-./model-stt.sh         # Whisper STT (port 8006)
+./scripts/model-chat.sh        # 80B chat model (port 8000)
+./scripts/model-code.sh        # 80B code model (port 8001)
+./scripts/model-reason.sh      # 35B reasoning model (port 8002)
+./scripts/model-general.sh     # 80B thinking model (port 8003)
+./scripts/model-lite.sh        # 4B lightweight model (port 8004)
+./scripts/model-tts.sh         # Kokoro TTS (port 8005)
+./scripts/model-stt.sh         # Whisper STT (port 8006)
+./scripts/model-system-one.sh  # System One decision scorer (port 8007)
 ```
 
 ### Custom Configuration
@@ -70,19 +73,19 @@ Override configuration via environment variables:
 
 ```bash
 # Change port
-HOST_PORT=9000 ./model-chat.sh
+HOST_PORT=9000 ./scripts/model-chat.sh
 
 # Change model
-MODEL=custom-model-name ./model-chat.sh
+MODEL=custom-model-name ./scripts/model-chat.sh
 
 # Change account
-ACCT=my-account ./model-chat.sh
+ACCT=my-account ./scripts/model-chat.sh
 
 # GPU memory utilization
-GPU_MEMORY_UTILIZATION=0.95 ./model-chat.sh
+GPU_MEMORY_UTILIZATION=0.95 ./scripts/model-chat.sh
 
 # Tensor parallel size (for multi-GPU)
-TENSOR_PARALLEL_SIZE=2 ./model-chat.sh
+TENSOR_PARALLEL_SIZE=2 ./scripts/model-chat.sh
 ```
 
 ### Running Multiple Models Simultaneously
@@ -91,22 +94,25 @@ Since each model uses a unique port, you can run them simultaneously:
 
 ```bash
 # Terminal 1 — chat model (~45 GB VRAM)
-./model-chat.sh
+./scripts/model-chat.sh
 
 # Terminal 2 — code model (~45 GB VRAM)
-./model-code.sh
+./scripts/model-code.sh
 
 # Terminal 3 — reasoning model (~20 GB VRAM)
-./model-reason.sh
+./scripts/model-reason.sh
 
 # Terminal 4 — lite model (~2.5 GB VRAM, runs alongside anything)
-./model-lite.sh
+./scripts/model-lite.sh
 
 # Terminal 5 — TTS (~0.3 GB VRAM)
-./model-tts.sh
+./scripts/model-tts.sh
 
 # Terminal 6 — STT (~1.5 GB VRAM)
-./model-stt.sh
+./scripts/model-stt.sh
+
+# Terminal 7 — System One scorer (~9 GB bf16, single-pass option scoring)
+./scripts/model-system-one.sh
 ```
 
 See [`internal-docs/guides/model-colocation-budget.md`](internal-docs/guides/model-colocation-budget.md)
@@ -114,8 +120,11 @@ for which combinations fit within your VRAM budget.
 
 ## Test Scripts
 
-Two helper scripts send a quick prompt to a running model server and print the
-response, useful for smoke-testing a deployment after `model-*.sh` brings it up.
+Two helper scripts in `scripts/` send a quick prompt to a running model server
+and print the response, useful for smoke-testing a deployment after
+`model-*.sh` brings it up. Endpoint-specific tests that can't use the chat
+API live in `tests/` — currently `tests/test-system-one.sh` for the scorer
+(`GET /health` + `POST /score` on port 8007).
 
 ### `test-query.sh` — local Docker discovery
 
@@ -126,9 +135,9 @@ containers are found and no `-p` is given, it falls back to host `ai` port
 `8002` (overridable via `FALLBACK_HOST` / `FALLBACK_PORT`).
 
 ```bash
-./test-query.sh                       # ping every running LLM container
-./test-query.sh 'hello world'         # custom prompt, all containers
-./test-query.sh -p 8002 -m qwen3 'hi' # single port, explicit model
+./scripts/test-query.sh                       # ping every running LLM container
+./scripts/test-query.sh 'hello world'         # custom prompt, all containers
+./scripts/test-query.sh -p 8002 -m qwen3 'hi' # single port, explicit model
 ```
 
 | Option            | Default                                                              |
@@ -149,10 +158,10 @@ Targets a single OpenAI-compatible endpoint on a remote machine (no Docker
 discovery). Defaults to host `ai` port `8002`, so it runs with no arguments.
 
 ```bash
-./test-query-local.sh                         # ping ai:8002
-./test-query-local.sh 'hello world'           # custom prompt, ai:8002
-./test-query-local.sh -p 8002 'hello world'   # explicit port
-./test-query-local.sh -h 10.0.0.5 -p 8001 -m qwen3 hi
+./scripts/test-query-local.sh                         # ping ai:8002
+./scripts/test-query-local.sh 'hello world'           # custom prompt, ai:8002
+./scripts/test-query-local.sh -p 8002 'hello world'   # explicit port
+./scripts/test-query-local.sh -h 10.0.0.5 -p 8001 -m qwen3 hi
 ```
 
 | Option            | Default                                                              |
@@ -203,10 +212,55 @@ All scripts support these environment variables:
 - `WHISPER_LOCAL_ONLY` - Set to `1` for Whisper air-gapped mode (pre-cached model only)
 - `WHISPER_LANGUAGE` - Language code (default: `auto`; e.g. `en`, `ja`, `zh`)
 
+### System One Scorer
+
+`model-system-one.sh` deploys `pngwn/system-one-qwen3.5-4b-scorer-v2b`, a
+"System One"-style decision scorer. Two things about it are easy to get
+wrong:
+
+- **It is not a smaller model.** The artifact on HF is a LoRA adapter
+  (~122 MB, ~30M trained weights) that must be loaded on top of the full
+  `Qwen/Qwen3.5-4B-Base` checkpoint. Serving it still requires the entire
+  4B backbone (~9 GB in bf16).
+- **Its speed comes from the access pattern, not the size.** Each option of
+  a question gets a scalar score in a *single forward pass* (~128 ms per
+  5-option query) — there is no autoregressive generation. The output is a
+  calibrated probability distribution over exactly the options you supply,
+  which makes it useful for routing/triage decisions where an LLM call
+  would be slower and uncalibrated.
+
+This deployment has **two files**, unlike the LLM scripts:
+
+- `scripts/model-system-one.sh` — the runner script (repo convention: one
+  `model-*.sh` per model). Detects the system, checks Python deps, and
+  launches the server on port 8007.
+- `libexec/system-one-server.py` — the actual HTTP service (`POST /score`), a small
+  stdlib server it launches via `run_native`. It exists because the scorer's
+  classification head lives in the adapter's `modules_to_save`, which
+  SGLang/vLLM/FreeToken/MLX do not load — those runtimes would serve the
+  base model as a text generator, not a scorer. A native
+  torch+transformers+peft process is the only way to serve the real
+  scoring semantics without building a custom image.
+
+`POST /score` accepts `{"state", "question", "options": [...]}` and returns
+per-option raw scores plus temperature-calibrated probabilities. Requires
+`pip install torch transformers peft` on the host. The adapter is
+CC-BY-NC-4.0 (non-commercial use only).
+
+- `S1_BASE_MODEL` - Base checkpoint (default: `Qwen/Qwen3.5-4B-Base`)
+- `S1_ADAPTER` - PEFT adapter repo (default: `pngwn/system-one-qwen3.5-4b-scorer-v2b`)
+- `S1_MAX_LEN` - Max sequence length (default: `384`, matches training; state is truncated first, never the question/option)
+- `S1_TEMPERATURE` - Calibration temperature (default: `2.35`, fitted on val; request `"temperature": 0` for raw scores)
+- `S1_BATCH_SIZE` - Options per forward pass (default: `8`)
+- `S1_MAX_OPTIONS` - Max options per request (default: `64`)
+- `S1_DEVICE` - `cuda`, `mps`, `cpu`, or `auto` (default: `auto`)
+- `S1_DTYPE` - `bf16`, `fp16`, `fp32` (default: bf16 on GPU/MPS, fp32 on CPU)
+- `S1_CONTAINER_NAME` - Process match name for stop logic (default: `system-one-server.py`)
+
 ## Adding a New Model
 
-Create a new script following this pattern (see `model-chat.sh` for a full
-example, or `model-lite.sh` for a simpler one):
+Create a new script in `scripts/` following this pattern (see `scripts/model-chat.sh`
+for a full example, or `scripts/model-lite.sh` for a simpler one):
 
 ```bash
 #!/usr/bin/env bash
@@ -221,8 +275,9 @@ example, or `model-lite.sh` for a simpler one):
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=./runner-lib.sh
-source "$SCRIPT_DIR/runner-lib.sh"
+# shellcheck source=../libexec/runner-lib.sh
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+source "$REPO_ROOT/libexec/runner-lib.sh"
 
 # Per-system model configuration
 configure_model() {
@@ -265,11 +320,14 @@ main "$@"
 ```
 
 For TTS/STT or other non-LLM services, use `run_custom_container()` instead
-of `run_container()`. See `model-tts.sh` and `model-stt.sh` for examples.
+of `run_container()` — see `scripts/model-tts.sh` and `scripts/model-stt.sh` for
+examples. For services that can't run in any container runtime at all (like
+the System One scorer, a PEFT classifier), ship a small server in `libexec/` and
+launch it via `run_native()` — see `scripts/model-system-one.sh`.
 
 ## Shared Library Functions
 
-The `runner-lib.sh` provides:
+`libexec/runner-lib.sh` provides:
 
 - `load_env()` - Load `.env` file if present
 - `check_prerequisites()` - Verify Docker/sudo (Docker runtimes) or CLI (native runtimes)
@@ -321,7 +379,7 @@ quality impact (~1-2 benchmark points vs BF16):
 
 ```bash
 # Enable for any LLM model script:
-KV_CACHE_DTYPE=fp8 ./model-chat.sh
+KV_CACHE_DTYPE=fp8 ./scripts/model-chat.sh
 
 # Or add to .env for all scripts:
 echo 'KV_CACHE_DTYPE=fp8' >> .env
