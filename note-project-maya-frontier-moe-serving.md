@@ -18,6 +18,7 @@ aliases:
 related:
   - "[[adr-202608021744-sglang-glom-runtime-mapping]]"
   - "[[adr-20260826-freetoken-runtime-amendment]]"
+  - "[[adr-20261027-project-maya-model-specific-engine]]"
   - "[[note-freetoken-edge-native-moe-serving]]"
 source:
   - "https://github.com/mw00/project-maya"
@@ -205,9 +206,11 @@ Amend the frontier-MoE row of the scenario map:
 And in the per-model-type table, mark Frontier MoE as "FreeToken default;
 Maya preferred for its 3 supported families pending benchmark."
 
-This is a *proposal* — a formal amendment ADR
-(`adr-YYYYMMDD-project-maya-model-specific-engine.md`) can be authored on
-approval, mirroring `adr-20260826-freetoken-runtime-amendment.md`.
+The formal amendment has been authored:
+[[adr-20261027-project-maya-model-specific-engine]] — proposes Maya as
+the preferred engine for its three supported families pending a GB10
+head-to-head benchmark, with FreeToken retained as the general MoE
+default.
 
 ## Quick Start on DGX Spark
 
