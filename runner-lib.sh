@@ -3,14 +3,24 @@
 # LLM Model Runner Library
 # Shared functions for deploying LLM models across multiple runtimes
 #
-# Supports four inference runtimes (per ADR-202608021744 as amended 2026-08-26):
+# Supports five inference runtimes (per ADR-202608021744 as amended 2026-08-26):
 #   - SGLang (cu130)   — default for in-VRAM dense models on GB10/Blackwell (Docker)
 #   - FreeToken        — default for MoE models, in-VRAM and frontier (native Python)
 #   - vLLM             — fallback for GPTQ/compressed-tensors/multi-GPU PP (Docker)
 #   - MLX (vllm-mlx)   — Apple Silicon Mac serving via Metal/MLX (native Python)
+#   - Strata           — llama.cpp-lineage engine tuned for DGX Spark (GB10,
+#                        sm_121, aarch64); serves GGUF packs with MoE expert
+#                        mmap (native CLI, no Docker)
 #
 # See ADR-202608021744 for the tiered runtime selection rationale.
 # See adr-20260826-freetoken-runtime-amendment.md for the FreeToken amendment.
+# See internal-docs/guides/runtime-selection.md for the scenario→runner matrix.
+#
+# NOTE on Basalt (github.com/jesdga95/basalt): NOT supported here. Basalt is
+# a Strata fork optimized for NVIDIA Blackwell but builds Linux/Windows
+# x86-64 only (AVX2) and targets sm_120 — the DGX Spark GB10 is aarch64 +
+# sm_121, so Basalt cannot run on it. Strata (its upstream) ships a
+# linux-aarch64 engine with GB10-tuned defaults and is the correct choice.
 #
 
 set -euo pipefail
@@ -18,7 +28,7 @@ set -euo pipefail
 # =============================================================================
 # Runtime Selection — change this to swap the inference engine
 # =============================================================================
-# Set RUNTIME to one of: "sglang", "freetoken", "vllm", "mlx".
+# Set RUNTIME to one of: "sglang", "freetoken", "vllm", "mlx", "strata".
 # All scripts that source this library and call run_container() will use the
 # selected runtime.
 #
@@ -54,6 +64,10 @@ VLLM_IMAGE="nvcr.io/nvidia/vllm:26.04-py3"
 # Pin to a specific PyPI version or git tag in the model script or .env.
 FREETOKEN_VERSION="${FREETOKEN_VERSION:-}"
 MLX_VERSION="${MLX_VERSION:-}"
+
+# Strata is a native CLI (signed engine feed) — no Docker image.
+# Install: https://github.com/Niko1221/Strata (one-line installer, no sudo).
+STRATA_VERSION="${STRATA_VERSION:-}"
 
 # Default configuration
 DEFAULT_LOCAL_CACHE_DIR="/root/.cache"
@@ -130,12 +144,19 @@ detect_runtime() {
   esac
 }
 
-# Resolve RUNTIME if not explicitly set by the script.
-# Called automatically when the library is sourced, but scripts can
-# override by setting RUNTIME before calling run_container().
-if [ -z "${RUNTIME:-}" ]; then
-  RUNTIME="$(detect_runtime)"
-fi
+# Resolve RUNTIME lazily — do NOT bake in the auto-detected default at source
+# time. Model scripts set their own per-system default in configure_model()
+# (which runs AFTER this file is sourced) via RUNTIME="${RUNTIME:-<default>}".
+# If RUNTIME were resolved here, the auto-detected value would always win over
+# the script's default, and e.g. model-general.sh's intended vLLM would
+# silently run SGLang instead. resolve_runtime() fills in the auto-detected
+# value only when neither the user nor the script set one; the dispatch
+# functions call it before consulting $RUNTIME.
+resolve_runtime() {
+  if [ -z "${RUNTIME:-}" ]; then
+    RUNTIME="$(detect_runtime)"
+  fi
+}
 
 # =============================================================================
 # Per-system model configuration helper
@@ -180,6 +201,7 @@ load_env() {
 
 # Check prerequisites
 check_prerequisites() {
+  resolve_runtime
   local missing=()
 
   # Docker-based runtimes (sglang, vllm) need docker + sudo
@@ -214,6 +236,16 @@ check_prerequisites() {
       echo "Error: vllm-mlx CLI not found."
       echo "Install with: pip install vllm-mlx"
       echo "Requires Apple Silicon Mac (M1+) with macOS 14+."
+      exit 1
+    fi
+  fi
+
+  # Strata needs the `strata` CLI (installed via the project's installer)
+  if [ "$RUNTIME" = "strata" ]; then
+    if ! command -v strata >/dev/null 2>&1; then
+      echo "Error: Strata CLI not found."
+      echo "Install with:"
+      echo "  curl -fsSL https://github.com/Niko1221/Strata/releases/latest/download/install.sh -o install.sh && sh install.sh"
       exit 1
     fi
   fi
@@ -255,6 +287,7 @@ clear_caches() {
 
 # Stop existing container or process if running
 stop_existing_container() {
+  resolve_runtime
   local container_name="$1"
 
   if [ "$RUNTIME" = "sglang" ] || [ "$RUNTIME" = "vllm" ]; then
@@ -262,6 +295,13 @@ stop_existing_container() {
     if docker ps -q -f name="$container_name" | grep -q .; then
       echo "Stopping existing container: $container_name"
       docker stop "$container_name" >/dev/null 2>&1 || true
+    fi
+  elif [ "$RUNTIME" = "strata" ]; then
+    # Strata manages its own server lifecycle; --restart in run_strata also
+    # replaces whatever is serving, but stop explicitly for a clean log line.
+    if command -v strata >/dev/null 2>&1 && strata launch --status 2>/dev/null | grep -qi "serving"; then
+      echo "Stopping existing Strata server"
+      strata launch --stop >/dev/null 2>&1 || true
     fi
   else
     # Native Python (freetoken, mlx): kill by process name match
@@ -292,10 +332,12 @@ stop_existing_container() {
 #   vllm      → run_vllm_container()   (Docker)
 #   freetoken → run_freetoken()        (native Python, no Docker)
 #   mlx       → run_mlx()              (native Python, no Docker, Apple Silicon)
+#   strata    → run_strata()           (native CLI, no Docker, DGX Spark tuned)
 #
 # For TTS/STT and other non-LLM services, model scripts call run_custom_container()
 # or run_native() directly instead of using this dispatcher.
 run_container() {
+  resolve_runtime
   case "$RUNTIME" in
     sglang)
       run_sglang_container "$@"
@@ -309,8 +351,11 @@ run_container() {
     mlx)
       run_mlx "$@"
       ;;
+    strata)
+      run_strata "$@"
+      ;;
     *)
-      echo "Error: Unknown RUNTIME '$RUNTIME'. Use 'sglang', 'freetoken', 'vllm', or 'mlx'." >&2
+      echo "Error: Unknown RUNTIME '$RUNTIME'. Use 'sglang', 'freetoken', 'vllm', 'mlx', or 'strata'." >&2
       exit 1
       ;;
   esac
@@ -529,6 +574,120 @@ run_freetoken() {
     --port "$host_port" \
     --moe-backend "$moe_backend" \
     "${additional_args[@]}"
+}
+
+# =============================================================================
+# Strata runner (native CLI, no Docker — DGX Spark / consumer-GPU tuned engine)
+# =============================================================================
+# Usage: run_strata <account> <model> <host_port> [additional_args...]
+#
+# Strata (github.com/Niko1221/Strata) is a llama.cpp-lineage engine with a
+# first-class DGX Spark port: linux-aarch64 engine, sm_121 perf defaults,
+# --mmap-experts for the 128 GB unified memory pool, and measured ~46 tok/s
+# decode on Qwen3.8-Flash-Next (see docs/DGX_SPARK_LINUX.md upstream).
+# It serves OpenAI- and Anthropic-compatible APIs.
+#
+# Install (no sudo; lands in ~/.local/share/strata, `strata` on PATH):
+#   curl -fsSL https://github.com/Niko1221/Strata/releases/latest/download/install.sh -o install.sh && sh install.sh
+#
+# Two model modes:
+#   Catalog pack — set STRATA_FAMILY + STRATA_PACK for a tuned catalog entry
+#     (e.g. STRATA_FAMILY=nvfp4 STRATA_PACK=nvfp4, or family qwen pack iq3_s).
+#     `strata launch` downloads the pack itself.
+#   HF GGUF repo — leave STRATA_FAMILY unset; $ACCT/$MODEL is treated as a
+#     Hugging Face repo, `hf download` fetches STRATA_GGUF_PATTERN-matching
+#     files into $STRATA_DATA_DIR/models/<model>/, and the folder is passed
+#     via --model-path. Use this for abliterated/community GGUF quants.
+#
+# NOTE: `strata launch` with --no-tui starts the server as a managed
+# background process and returns — this function returns while the model
+# keeps serving (unlike the Docker runners, which stay foregrounded).
+#
+# Environment variables:
+#   STRATA_FAMILY        — catalog model family (e.g. qwen, nvfp4); unset = HF repo mode
+#   STRATA_PACK          — catalog pack name (default: $MODEL)
+#   STRATA_GGUF_PATTERN  — hf download --include pattern for HF repo mode
+#                          (default: "*", i.e. all files — set it!)
+#   STRATA_DATA_DIR      — Strata data/model dir (default: $LOCAL_CACHE_DIR/strata)
+#   STRATA_CONTEXT       — context size (default: 64k)
+#   STRATA_ACCESS        — local|lan|cloudflare|tailscale (default: lan, to
+#                          match the Docker runners' 0.0.0.0 binding)
+#   STRATA_API_KEY       — if set, clients must send this key; unset = --no-api-key
+#
+run_strata() {
+  local account="$1"
+  local model="$2"
+  local host_port="$3"
+  shift 3
+  local additional_args=("$@")
+
+  local local_cache_dir="${LOCAL_CACHE_DIR:-$DEFAULT_LOCAL_CACHE_DIR}"
+  local data_dir="${STRATA_DATA_DIR:-$local_cache_dir/strata}"
+  local context="${STRATA_CONTEXT:-64k}"
+  local access="${STRATA_ACCESS:-lan}"
+
+  local -a launch_args=(
+    --context "$context"
+    --access "$access"
+    --port "$host_port"
+    --data-dir "$data_dir"
+    --no-tui
+    --yes
+    --restart
+  )
+
+  # Repo convention is unauthenticated LAN endpoints; match it by default.
+  if [ -n "${STRATA_API_KEY:-}" ]; then
+    launch_args+=(--api-key "$STRATA_API_KEY")
+  else
+    launch_args+=(--no-api-key)
+  fi
+
+  if [ -n "${STRATA_FAMILY:-}" ]; then
+    launch_args+=(--family "$STRATA_FAMILY" --model "${STRATA_PACK:-$model}")
+    echo "Starting Strata server (catalog pack): $STRATA_FAMILY/${STRATA_PACK:-$model}"
+  else
+    # HF repo mode: download GGUF files and serve the folder via --model-path
+    local model_dir="$data_dir/models/$model"
+    echo "Starting Strata server (HF GGUF): $account/$model"
+    if ! command -v hf >/dev/null 2>&1; then
+      echo "Error: 'hf' CLI required to download $account/$model." >&2
+      echo "Install with: uv tool install huggingface-hub" >&2
+      exit 1
+    fi
+    if ! compgen -G "$model_dir/*.gguf" >/dev/null 2>&1 && [ -z "$(find "$model_dir" -name '*.gguf' -print -quit 2>/dev/null)" ]; then
+      echo "Downloading $account/$model (pattern: ${STRATA_GGUF_PATTERN:-*}) -> $model_dir"
+      mkdir -p "$model_dir"
+      hf download "$account/$model" \
+        --include "${STRATA_GGUF_PATTERN:-*}" \
+        --local-dir "$model_dir"
+    else
+      echo "Using cached model files in $model_dir"
+    fi
+    # --model-path wants "a folder of shards or one .gguf" — hf download may
+    # nest the shards in a subdir (e.g. swift-IQ3_S/), so point at the dir
+    # that actually contains the .gguf files.
+    local model_path
+    model_path="$(dirname "$(find "$model_dir" -name '*.gguf' -print -quit)")"
+    if [ -z "$model_path" ] || [ ! -d "$model_path" ]; then
+      echo "Error: no .gguf files found under $model_dir after download." >&2
+      exit 1
+    fi
+    launch_args+=(--model-path "$model_path")
+  fi
+
+  echo "Host Port: $host_port"
+  echo "Context: $context"
+  echo "Access: $access"
+  echo "Data Dir: $data_dir"
+  if [ -n "$STRATA_VERSION" ]; then
+    echo "Strata Version: $STRATA_VERSION"
+  else
+    echo "Strata Version: (unpinned — set STRATA_VERSION for reproducibility)"
+  fi
+
+  mkdir -p "$data_dir"
+  strata launch "${launch_args[@]}" "${additional_args[@]}"
 }
 
 # =============================================================================

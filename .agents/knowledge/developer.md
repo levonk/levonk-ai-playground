@@ -59,7 +59,7 @@ themselves.
 ./test-query-local.sh                 # targets remote host `ai` port 8002
 ```
 
-**Override a model script via env vars** (see `vllm-runner-lib.sh` defaults):
+**Override a model script via env vars** (see `runner-lib.sh` defaults):
 ```bash
 HOST_PORT=9000 ./model-chat.sh
 MODEL=custom-model ACCT=my-account ./model-chat.sh
@@ -99,8 +99,8 @@ model script and confirm the vLLM server responds via `test-query.sh`.
 ## Key Files
 
 **Scripts:**
-- `vllm-runner-lib.sh` — shared library; every `model-*.sh` sources this. Provides `load_env`, `check_prerequisites`, `setup_huggingface`, `clear_caches`, `stop_existing_container`, `run_vllm_container`
-- `model-*.sh` — one runner per model. Sets `ACCT`, `MODEL`, `HOST_PORT`, optional vLLM flags, then calls `run_vllm_container`
+- `runner-lib.sh` — shared library; every `model-*.sh` sources this. Provides `load_env`, `check_prerequisites`, `setup_huggingface`, `clear_caches`, `stop_existing_container`, `run_container`
+- `model-*.sh` — one runner per model. Sets `ACCT`, `MODEL`, `HOST_PORT`, optional vLLM flags, then calls `run_container`
 - `test-query.sh` — auto-discovers Docker LLM containers and POSTs an OpenAI-style chat completion to each
 - `test-query-local.sh` — targets a single remote OpenAI-compatible endpoint (no Docker discovery)
 
@@ -117,9 +117,9 @@ model script and confirm the vLLM server responds via `test-query.sh`.
 ## Patterns
 
 **Shared library pattern (DRY):**
-- ✅ DO put shared Docker/vLLM logic in `vllm-runner-lib.sh`
-- ✅ DO source the library at the top of every `model-*.sh`: `source "$SCRIPT_DIR/vllm-runner-lib.sh"`
-- ✅ DO keep each `model-*.sh` thin: set `ACCT`/`MODEL`/`HOST_PORT` and model-specific flags, then call `run_vllm_container`
+- ✅ DO put shared Docker/vLLM logic in `runner-lib.sh`
+- ✅ DO source the library at the top of every `model-*.sh`: `source "$SCRIPT_DIR/runner-lib.sh"`
+- ✅ DO keep each `model-*.sh` thin: set `ACCT`/`MODEL`/`HOST_PORT` and model-specific flags, then call `run_container`
 - ✅ DO use a unique `HOST_PORT` per model so models run simultaneously
 - ✅ DO use `set -euo pipefail` in every script
 - ❌ DON'T duplicate Docker run flags across model scripts — extend the library instead
@@ -130,15 +130,15 @@ model script and confirm the vLLM server responds via `test-query.sh`.
 #!/usr/bin/env bash
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=./vllm-runner-lib.sh
-source "$SCRIPT_DIR/vllm-runner-lib.sh"
+# shellcheck source=./runner-lib.sh
+source "$SCRIPT_DIR/runner-lib.sh"
 ACCT="${ACCT:-your-account}"
 MODEL="${MODEL:-your-model-name}"
 HOST_PORT="${HOST_PORT:-8004}"  # pick a free port
 main() {
   load_env; check_prerequisites; setup_huggingface
   clear_caches; stop_existing_container "$MODEL"
-  run_vllm_container "$ACCT" "$MODEL" "$HOST_PORT" --your-flag value
+  run_container "$ACCT" "$MODEL" "$HOST_PORT" --your-flag value
 }
 main "$@"
 ```
@@ -146,12 +146,12 @@ main "$@"
 **Env-var overrides:** All tunable values (`HOST_PORT`, `MODEL`, `ACCT`,
 `GPU_MEMORY_UTILIZATION`, `TENSOR_PARALLEL_SIZE`, `MAX_NUM_BATCHED_TOKENS`,
 `LOCAL_CACHE_DIR`, `CONTAINER_CACHE_DIR`, `OTLP_TRACES_ENDPOINT`) read from
-env with defaults in `vllm-runner-lib.sh`. Keep this pattern for new knobs.
+env with defaults in `runner-lib.sh`. Keep this pattern for new knobs.
 
 ## Boundaries
 
 ### Always
-- Source `vllm-runner-lib.sh` from every `model-*.sh`
+- Source `runner-lib.sh` from every `model-*.sh`
 - Use `set -euo pipefail` in every script
 - Pick a unique `HOST_PORT` for any new model script
 - Keep the shared library the single source of Docker/vLLM run logic
@@ -168,14 +168,14 @@ env with defaults in `vllm-runner-lib.sh`. Keep this pattern for new knobs.
 - Hardcode a HF token in a script
 - Run `docker run` without `--rm` (the library always uses `--rm`; leaving containers around breaks `stop_existing_container` assumptions)
 - Assume flags tuned for GB10 generalize to other GPUs without re-tuning
-- Bypass `vllm-runner-lib.sh` and inline Docker run logic in a model script
+- Bypass `runner-lib.sh` and inline Docker run logic in a model script
 
 ## Known Gotchas
 
 - **No justfile**: `devbox.json` declares `just` and references `just *-internal` targets, but there is no `justfile` in this repo. The targets come from rtk bundles. Verify they resolve before relying on `just build`/`just test`.
 - **`clear_caches` needs sudo**: it writes `3` to `/proc/sys/vm/drop_caches`. On hosts without passwordless sudo it warns and continues — not a hard failure.
 - **`hf` vs `huggingface-cli`**: `setup_huggingface` calls `hf auth login`. If only `huggingface-cli` is installed, HF login is skipped with a warning.
-- **Container name = model name**: `run_vllm_container` names the container `$MODEL`. `stop_existing_container "$MODEL"` relies on this. If you override `MODEL` via env, the stop logic still works because both use the same `$MODEL`.
+- **Container name = model name**: `run_container` names the container `$MODEL`. `stop_existing_container "$MODEL"` relies on this. If you override `MODEL` via env, the stop logic still works because both use the same `$MODEL`.
 - **OTLP is opt-in**: `OTLP_TRACES_ENDPOINT` empty/unset = tracing disabled. Only set it when an OTLP collector (e.g., OpenLit) is reachable.
 - **Speculative decoding is model-specific**: `model-general.sh` passes `--speculative-config '{"method":"qwen3_next_mtp","num_speculative_tokens":2}'`. This only works for Qwen3-Next MTP models — do not copy it to other model scripts.
 - **README model table can drift from scripts**: the README lists `model-reasoning.sh` but the actual file is `model-reason.sh`. Trust the scripts, not the table, when they disagree.
@@ -187,7 +187,7 @@ A change to a runner or the library is done when:
 - [ ] The affected `model-*.sh` runs on the GPU box without manual intervention
 - [ ] `./test-query.sh` returns HTTP 200 from the deployed container
 - [ ] No new host port collides with an existing `model-*.sh`
-- [ ] Shared logic was extended in `vllm-runner-lib.sh`, not duplicated in the runner
+- [ ] Shared logic was extended in `runner-lib.sh`, not duplicated in the runner
 - [ ] `.env` and any token values are absent from the diff
 - [ ] The README model table and env-var list still match the scripts (or are updated)
 - [ ] The closest `AGENTS.md` chain was re-read and any stale text removed
