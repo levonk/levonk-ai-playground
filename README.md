@@ -43,7 +43,7 @@ Each model runs on a unique host port to allow simultaneous deployment:
 | `model-tts.sh` | Kokoro-82M | hwdsl2 | 8005 | ~0.3 GB | OpenAI-compatible `/v1/audio/speech` |
 | `model-stt.sh` | Whisper large-v3-turbo | hwdsl2 | 8006 | ~1.5 GB | OpenAI-compatible `/v1/audio/transcriptions` |
 | `model-flash.sh` | Qwen3.8-Flash-Next (NVFP4 pack) | nvidia | 8007 | ~68 GB | Strata runtime — GB10-tuned, ~46 tok/s |
-| `model-abliterated.sh` | Huihui-Qwen3.8-Flash-Next-abliterated-v2-GGUF (swift-IQ3_S) | huihui-ai | 8008 | ~84 GB | Uncensored endpoint (Strata) |
+| `model-abliterated.sh` | Huihui-Qwen3.8-27B-abliterated (bf16) | huihui-ai | 8008 | ~54 GB | Uncensored endpoint (SGLang; co-run headroom) |
 
 VRAM figures are approximate for AWQ-4bit / GPTQ-int4 quantization on the
 NVIDIA GB10 128GB. See [`internal-docs/platforms/`](internal-docs/platforms/INDEX.md)
@@ -65,7 +65,7 @@ Run a specific model:
 ./model-tts.sh         # Kokoro TTS (port 8005)
 ./model-stt.sh         # Whisper STT (port 8006)
 ./model-flash.sh       # Qwen3.8-Flash-Next via Strata (port 8007)
-./model-abliterated.sh # Abliterated Flash-Next via Strata (port 8008)
+./model-abliterated.sh # Abliterated Qwen3.8-27B via SGLang (port 8008)
 ```
 
 ### Custom Configuration

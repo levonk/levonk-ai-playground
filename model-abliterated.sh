@@ -9,19 +9,21 @@
 # anyway). If an abliterated model proves better than an aligned one for a
 # category, swap that category's MODEL instead of adding another script.
 #
-# Why Flash-Next as the default: it is a generation newer than the
-# Qwen3-Next-80B models in the other categories, and under Strata on the GB10
-# it is also the fastest option (~46 tok/s decode upstream-measured) despite
-# being the biggest model — the trade-off is memory (~84 GB), which leaves
-# ~35 GB and blocks co-running another large model.
+# Why Qwen3.8-27B bf16 as the default: ~54 GB of weights leaves ~70 GB of
+# the GB10's unified memory free, so the abliterated endpoint can co-run
+# with another large model. It is also a generation newer than the
+# Qwen3-Next-80B models in the other categories.
 #
-# NVIDIA (DGX Spark GB10):  huihui-ai Qwen3.8-Flash-Next-abliterated-v2-GGUF
-#   - Strata + swift-IQ3_S pack (~84 GB download): best quality+speed combo.
-#   - Co-location-friendly alternative (leaves ~75 GB):
-#       RUNTIME=vllm ACCT=coughmedicine \
-#       MODEL=Huihui-Qwen3-Next-80B-A3B-Instruct-abliterated-W4A16 \
+# NVIDIA (DGX Spark GB10):  huihui-ai Huihui-Qwen3.8-27B-abliterated (SGLang, bf16)
+#   - ~54 GB download: co-location-friendly default.
+#   - vLLM fallback if SGLang rejects the arch on this image:
+#       RUNTIME=vllm ./model-abliterated.sh
+#   - Max-quality alternative (fills the box, ~84 GB):
+#       RUNTIME=strata \
+#       MODEL=Huihui-Qwen3.8-Flash-Next-abliterated-v2-GGUF \
+#       STRATA_GGUF_PATTERN='swift-IQ3_S/*' \
 #       ./model-abliterated.sh
-#   - Max-quality alternative (fills the box, ~100 GB):
+#   - Max-quality vLLM alternative (~100 GB):
 #       RUNTIME=vllm ACCT=Jiunsong \
 #       MODEL=SuperQwen3.8-Flash-Next-abliterated-FP8-DGX-Spark \
 #       ./model-abliterated.sh
@@ -52,11 +54,9 @@ configure_model() {
   case "$system" in
     nvidia)
       ACCT="${ACCT:-huihui-ai}"
-      MODEL="${MODEL:-Huihui-Qwen3.8-Flash-Next-abliterated-v2-GGUF}"
+      MODEL="${MODEL:-Huihui-Qwen3.8-27B-abliterated}"
       HOST_PORT="${HOST_PORT:-8008}"
-      RUNTIME="${RUNTIME:-strata}"
-      # swift-IQ3_S shards only (~84 GB of the ~1 TB quant zoo in this repo)
-      STRATA_GGUF_PATTERN="${STRATA_GGUF_PATTERN:-swift-IQ3_S/*}"
+      RUNTIME="${RUNTIME:-sglang}"
       ;;
     apple-silicon)
       ACCT="${ACCT:-mlx-community}"

@@ -77,7 +77,7 @@ category script rather than adding per-category abliterated scripts:
 | reason | `codgician/...-Claude-4.6-Opus-Reasoning-Distilled-GPTQ-int4` | `huihui-ai/Huihui-Qwen3.5-35B-A3B-Claude-4.6-Opus-abliterated` (BF16 ~70 GB) |
 | general | `cyankiwi/Qwen3-Next-80B-A3B-Thinking-AWQ-4bit` | `amphineko/Huihui-Qwen3-Next-80B-A3B-Thinking-abliterated-AutoRound-W4A16` (41.5 GB) |
 | lite | `Qwen/Qwen3-4B-Instruct-AWQ` | `huihui-ai/Huihui-Qwen3-4B-Instruct-2507-abliterated` (BF16 ~8 GB) |
-| dedicated | `model-abliterated.sh` (port 8008) | `huihui-ai/Huihui-Qwen3.8-Flash-Next-abliterated-v2-GGUF` swift-IQ3_S (~84 GB, Strata) |
+| dedicated | `model-abliterated.sh` (port 8008) | `huihui-ai/Huihui-Qwen3.8-27B-abliterated` (BF16 ~54 GB, SGLang — co-run headroom); max-quality alt: `Huihui-Qwen3.8-Flash-Next-abliterated-v2-GGUF` swift-IQ3_S (~84 GB, Strata) |
 
 The dedicated `model-abliterated.sh` exists because abliteration is a variant
 of a role — one uncensored endpoint, not a fifth category axis. Aligned and
