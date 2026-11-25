@@ -9,6 +9,14 @@ This directory contains only the **GPU workload** scripts — generation,
 finishing, and LoRA training — plus workflow definitions and reference image
 packs.
 
+> **Note (2026-11-24):** SGLang Diffusion now ships in the same SGLang
+> package/CLI (image, video, 3D pipelines + OpenAI-compatible image/video
+> API + ComfyUI plugin, per the
+> [v1.0 tracker](https://github.com/sgl-project/sglang/issues/50045)).
+> Long-term it may replace standalone ComfyUI for plain generation on this
+> host; the LoRA training (`train-lora.sh`) and finishing
+> (`run-finishing.sh`) pipeline has no SGLang equivalent yet.
+
 ## What lives here (playground = GPU workload)
 
 - **run-generation.sh** — Queue a workflow via the ComfyUI API and save output
