@@ -4,13 +4,16 @@
 > targets. Extends the tiered model in
 > [ADR-202608021744](../adr/2026/08/adr-202608021744-sglang-glom-runtime-mapping.md)
 > and its [FreeToken amendment](../adr/2026/08/adr-20260826-freetoken-runtime-amendment.md)
-> with the GGUF-native engines (Strata, Basalt). Evaluated 2026-11-18.
+> with the GGUF-native engines (Strata, Basalt). Evaluated 2026-11-24 —
+> revised for the SGLang 1.0 announcement landscape (see the
+> [SGLang 1.0 section](#sglang-10-landscape-shift) and
+> [note-sglang-1-landscape.md](../../note-sglang-1-landscape.md)).
 
 ## The runners
 
 | Runner | Executes as | API | Strongest at |
 |--------|------------|-----|--------------|
-| **SGLang** (`lmsysorg/sglang:v0.5.16-cu130`) | Docker | OpenAI | In-VRAM dense models on NVIDIA; AWQ `awq_merlin` kernels |
+| **SGLang** (`lmsysorg/sglang:v0.5.23-cu130`) | Docker | OpenAI (+ image/video) | In-VRAM dense models on NVIDIA; AWQ `awq_merlin` kernels; Paged Experts for MoE > VRAM; bundled SGLang Diffusion |
 | **vLLM** (`nvcr.io/nvidia/vllm:26.04-py3`) | Docker | OpenAI | GPTQ/compressed-tensors quants, multi-GPU PP, broadest model support |
 | **FreeToken** (`ft`) | native Python | OpenAI + Anthropic | MoE models — semantic KV caching for agent loops, bandwidth-adaptive CPU/GPU expert split |
 | **Strata** (`strata`) | native CLI | OpenAI + Anthropic | GGUF-pack MoE on consumer/unified-memory GPUs; **only engine with a tuned linux-aarch64 DGX Spark build** |
@@ -25,11 +28,50 @@
 | GB10: in-VRAM MoE, agentic workload | **FreeToken** | `RUNTIME=freetoken` | Semantic anchor checkpoints reuse KV across agent edits; `fused` backend when experts fit |
 | GB10: Qwen3.8-Flash-Next-class GGUF MoE | **Strata** | `RUNTIME=strata` | sm_121 perf table, `--mmap-experts` maps all experts into the unified pool once. Upstream-measured ~43-46 tok/s decode vs ~19-24 estimated for generic runtimes |
 | GB10: GPTQ / compressed-tensors / multi-GPU PP | **vLLM** | `RUNTIME=vllm` | FreeToken has no GPTQ support; vLLM is the mature fallback for these formats |
-| GB10: frontier MoE exceeding VRAM (753B GLM-5.2 etc.) | **FreeToken** | `RUNTIME=freetoken` | `hybrid`/`offload` backends split experts across GPU + host RAM by calibrated bandwidth |
+| GB10: frontier MoE exceeding VRAM (753B GLM-5.2 etc.) | **FreeToken** — SGLang Paged Experts is a new contender | `RUNTIME=freetoken` | `hybrid`/`offload` backends split experts across GPU + host RAM by calibrated bandwidth. SGLang's opt-in Paged Experts (~30x vs CPU offload) now covers the same slot — validate on GB10 before switching |
 | x86 Blackwell desktop (RTX 50xx, sm_120) | **Basalt** — or Strata | n/a | Basalt's sm_120-tuned engine + `.basalt` packs; Strata also runs there. **Not reachable via runner-lib yet** — the scripts in this repo are GB10-tuned only |
 | Apple Silicon Mac | **MLX** | `RUNTIME=mlx` | Metal-native, pre-converted mlx-community repos; Strata also has a macOS engine but MLX is the repo default |
 | AMD/Intel GPU (Vulkan) | **vLLM** (Vulkan backend) or llama.cpp | `RUNTIME=vllm` | No CUDA; GGUF via vLLM's Vulkan path or llama.cpp directly |
 | CPU-only | **vLLM** / llama.cpp | `RUNTIME=vllm` | Slow but functional |
+
+## SGLang 1.0 landscape shift
+
+SGLang announced v1.0 at SGLang Summit (release tracker
+[sgl-project/sglang#50045](https://github.com/sgl-project/sglang/issues/50045),
+opened 2026-11-12). **v1.0.0 is not yet tagged** — latest stable is v0.5.23
+(2026-11-02), now pinned in `runner-lib.sh`. 1.0 is a stability release: it
+hardens 0.5.x features, freezes a 1.x compatibility policy, and rejects
+unsupported configs with named errors instead of silently adjusting them.
+
+What changes for the tiered model:
+
+- **Paged Experts** (v0.5.23, opt-in) runs MoE larger than VRAM on a single
+  consumer GPU — up to ~30x faster than CPU offload. This contests
+  FreeToken's frontier-MoE slot. FreeToken still owns the agentic-KV niche
+  (semantic anchor checkpoints for mid-session context edits). **Action:**
+  validate Paged Experts on the GB10 before amending the ADR.
+- **SGLang Diffusion** ships in the same package and CLI — native pipelines
+  for image/video/3D/world/action models, OpenAI-compatible image+video
+  API, Python SDK, and a ComfyUI plugin. Long-term this can replace the
+  standalone ComfyUI stack in `comfyui/` for plain generation; the LoRA
+  training + finishing pipeline there has no SGLang equivalent yet.
+- **Unified memory + HiCache L3** covers hybrid-model state and long agent
+  histories beyond GPU memory — partial overlap with FreeToken's pitch.
+- **sgl-router** (Rust) retires `sgl-model-gateway`; the Docker images ship
+  sgl-router. The scripts here call `sglang.launch_server` directly and are
+  unaffected.
+- **Removed/changed surface for the 1.x upgrade:** deprecated flags
+  (`--disable-cuda-graph`, `--enable-dp-attention`, other 0.5.x
+  deprecations) hard-fail at startup naming their replacement — none are
+  used in this repo. Admin routes (weight updates, cache, LoRA, profiling)
+  need `--admin-api-key`; media URLs resolving to private addresses get a
+  400 unless `--allow-private-media-hosts` (relevant only if diffusion
+  requests reference tailnet media).
+
+What does NOT change: no GGUF (Strata keeps its slot), no Apple
+Silicon/Metal (MLX keeps its slot), no GPTQ maturity advantage (vLLM keeps
+its slot), no aarch64 GGUF tuning (Strata's sm_121 build is still the
+measured-fastest GGUF path on GB10).
 
 ## Basalt: evaluated, not adopted (for GB10)
 

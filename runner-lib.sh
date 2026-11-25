@@ -12,6 +12,16 @@
 #                        sm_121, aarch64); serves GGUF packs with MoE expert
 #                        mmap (native CLI, no Docker)
 #
+# SGLang 1.0 landscape (announced 2026-11-12, tracker sgl-project/sglang#50045):
+#   - SGLang Diffusion is bundled in the same package/CLI (image, video, 3D
+#     generation + OpenAI-compatible image/video API + ComfyUI plugin).
+#   - Paged Experts (v0.5.23, opt-in) runs MoE larger than VRAM on one GPU —
+#     contests FreeToken's frontier-MoE slot; not yet validated on GB10.
+#   - 1.0 removes sgl-model-gateway (use sgl-router), removes deprecated
+#     flags (--disable-cuda-graph, --enable-dp-attention — unused here),
+#     requires --admin-api-key for admin routes, and errors on unsupported
+#     configs instead of silently adjusting them.
+#
 # See ADR-202608021744 for the tiered runtime selection rationale.
 # See adr-20260826-freetoken-runtime-amendment.md for the FreeToken amendment.
 # See internal-docs/guides/runtime-selection.md for the scenario→runner matrix.
@@ -57,7 +67,7 @@ set -euo pipefail
 # Scripts can override by setting RUNTIME before sourcing this file.
 
 # Pinned image tags (do NOT use floating "latest" tags in production)
-SGLANG_IMAGE="lmsysorg/sglang:v0.5.16-cu130"
+SGLANG_IMAGE="lmsysorg/sglang:v0.5.23-cu130"
 VLLM_IMAGE="nvcr.io/nvidia/vllm:26.04-py3"
 
 # FreeToken and MLX are native Python — no Docker image.
