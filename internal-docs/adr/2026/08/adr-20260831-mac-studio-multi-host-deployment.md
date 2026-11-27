@@ -444,7 +444,7 @@ and bandwidth-adaptive execution would be valuable on the Mac too.
   the Mac Studio.
 - **`test-query-local.sh`** — already supports `-h` for remote host. No code
   change. Update documentation to show Mac Studio as a target
-  (`./test-query-local.sh -h ai-mac -p 8000`).
+  (`./scripts/test-query-local.sh -h ai-mac -p 8000`).
 - **README model table** — add "Host" column (DGX Spark vs Mac Studio) alongside
   existing port/runtime columns. Add Mac Studio models.
 - **ADR-202608021744** — add a note that the runtime selection applies to the
@@ -528,7 +528,7 @@ and bandwidth-adaptive execution would be valuable on the Mac too.
    Follow the FreeToken native Python pattern (no Docker).
 5. **Create `model-mac-frontier.sh`** (GLM-5.2 753B, MLX or llama.cpp, port
    8000 on the Mac). Smoke-test with
-   `./test-query-local.sh -h ai-mac -p 8000`.
+   `./scripts/test-query-local.sh -h ai-mac -p 8000`.
 6. **Create `model-mac-large-dense.sh`** for large dense models that benefit
    from the Mac's 512GB memory (e.g., a 70B model at BF16 or FP8 instead of
    4-bit quantization).

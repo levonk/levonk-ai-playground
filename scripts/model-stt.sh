@@ -30,9 +30,9 @@
 #       POST /v1/audio/translations     (OpenAI-compatible)
 #
 # Usage:
-#   ./model-stt.sh                    # start STT server on port 8006
-#   HOST_PORT=9006 ./model-stt.sh      # custom port
-#   CUSTOM_IMAGE=hwdsl2/whisper-server:cuda ./model-stt.sh  # override image
+#   ./scripts/model-stt.sh                    # start STT server on port 8006
+#   HOST_PORT=9006 ./scripts/model-stt.sh      # custom port
+#   CUSTOM_IMAGE=hwdsl2/whisper-server:cuda ./scripts/model-stt.sh  # override image
 #
 # Test:
 #   curl -X POST http://localhost:8006/v1/audio/transcriptions \
@@ -57,8 +57,9 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=./runner-lib.sh
-source "$SCRIPT_DIR/runner-lib.sh"
+# shellcheck source=../libexec/runner-lib.sh
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+source "$REPO_ROOT/libexec/runner-lib.sh"
 
 # Whisper STT Docker image (pinned for reproducibility).
 # The :cuda tag includes CUDA support for NVIDIA GPU acceleration.

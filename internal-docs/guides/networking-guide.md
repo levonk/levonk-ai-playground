@@ -126,10 +126,10 @@ The repo's `test-query-local.sh` targets a remote host. With Tailscale:
 
 ```bash
 # Test the chat model via tailnet
-./test-query-local.sh -h 100.64.0.1 -p 8000 'hello'
+./scripts/test-query-local.sh -h 100.64.0.1 -p 8000 'hello'
 
 # Or with MagicDNS:
-./test-query-local.sh -h gpu-host -p 8000 'hello'
+./scripts/test-query-local.sh -h gpu-host -p 8000 'hello'
 ```
 
 ## KV cache persistence on the tailnet

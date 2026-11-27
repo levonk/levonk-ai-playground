@@ -14,7 +14,7 @@ Pick one:
 
 - **A.** Add a minimal `justfile` with the targets that make sense for a
   shell-script repo (e.g., `lint` → `shellcheck *.sh`, `test` →
-  `./test-query.sh` smoke check) and remove the rest from `devbox.json`.
+  `./scripts/test-query.sh` smoke check) and remove the rest from `devbox.json`.
 - **B.** Remove the `scripts` block from `devbox.json` entirely and document
   that this repo has no task runner.
 

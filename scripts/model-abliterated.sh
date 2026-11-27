@@ -17,16 +17,16 @@
 # NVIDIA (DGX Spark GB10):  huihui-ai Huihui-Qwen3.8-27B-abliterated (SGLang, bf16)
 #   - ~54 GB download: co-location-friendly default.
 #   - vLLM fallback if SGLang rejects the arch on this image:
-#       RUNTIME=vllm ./model-abliterated.sh
+#       RUNTIME=vllm ./scripts/model-abliterated.sh
 #   - Max-quality alternative (fills the box, ~84 GB):
 #       RUNTIME=strata \
 #       MODEL=Huihui-Qwen3.8-Flash-Next-abliterated-v2-GGUF \
 #       STRATA_GGUF_PATTERN='swift-IQ3_S/*' \
-#       ./model-abliterated.sh
+#       ./scripts/model-abliterated.sh
 #   - Max-quality vLLM alternative (~100 GB):
 #       RUNTIME=vllm ACCT=Jiunsong \
 #       MODEL=SuperQwen3.8-Flash-Next-abliterated-FP8-DGX-Spark \
-#       ./model-abliterated.sh
+#       ./scripts/model-abliterated.sh
 # Apple Silicon (Mac):      mlx-community Claude-4.6-Opus-abliterated-4bit (MLX)
 #   - ~20 GB — the practical abliterated pick for unified-memory Macs.
 # Vulkan:                   mradermacher 80B-A3B-Instruct-abliterated GGUF (vLLM)
@@ -42,8 +42,9 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=./runner-lib.sh
-source "$SCRIPT_DIR/runner-lib.sh"
+# shellcheck source=../libexec/runner-lib.sh
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+source "$REPO_ROOT/libexec/runner-lib.sh"
 
 # Per-system model configuration
 configure_model() {

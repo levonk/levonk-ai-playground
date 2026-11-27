@@ -9,7 +9,7 @@
 # no container returned HTTP 200.
 #
 # Usage:
-#   ./test-query.sh [OPTIONS] [PROMPT]
+#   ./scripts/test-query.sh [OPTIONS] [PROMPT]
 #
 # Arguments:
 #   PROMPT              Prompt text to send. Multiple positional args are
@@ -44,10 +44,10 @@
 #   building/parsing; falls back to sed-based escaping otherwise.
 #
 # Examples:
-#   ./test-query.sh                          # ping every running LLM container
-#   ./test-query.sh 'hello world'            # custom prompt, all containers
-#   ./test-query.sh -p 8002 -m qwen3 'hi'    # single port, explicit model
-#   ./test-query.sh --port 8002 ping
+#   ./scripts/test-query.sh                          # ping every running LLM container
+#   ./scripts/test-query.sh 'hello world'            # custom prompt, all containers
+#   ./scripts/test-query.sh -p 8002 -m qwen3 'hi'    # single port, explicit model
+#   ./scripts/test-query.sh --port 8002 ping
 #
 set -uo pipefail
 CONNECT_TIMEOUT="${CONNECT_TIMEOUT:-5}"

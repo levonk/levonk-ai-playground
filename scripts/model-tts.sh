@@ -31,9 +31,9 @@
 # API:  POST /v1/audio/speech  (OpenAI-compatible)
 #
 # Usage:
-#   ./model-tts.sh                    # start TTS server on port 8005
-#   HOST_PORT=9005 ./model-tts.sh      # custom port
-#   CUSTOM_IMAGE=hwdsl2/kokoro-server:cuda ./model-tts.sh  # override image
+#   ./scripts/model-tts.sh                    # start TTS server on port 8005
+#   HOST_PORT=9005 ./scripts/model-tts.sh      # custom port
+#   CUSTOM_IMAGE=hwdsl2/kokoro-server:cuda ./scripts/model-tts.sh  # override image
 #
 # Test:
 #   curl -X POST http://localhost:8005/v1/audio/speech \
@@ -50,8 +50,9 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=./runner-lib.sh
-source "$SCRIPT_DIR/runner-lib.sh"
+# shellcheck source=../libexec/runner-lib.sh
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+source "$REPO_ROOT/libexec/runner-lib.sh"
 
 # Kokoro TTS Docker image (pinned to a specific tag for reproducibility).
 # The :cuda tag includes CUDA support for NVIDIA GPU acceleration.

@@ -39,7 +39,7 @@
 SGLang announced v1.0 at SGLang Summit (release tracker
 [sgl-project/sglang#50045](https://github.com/sgl-project/sglang/issues/50045),
 opened 2026-11-12). **v1.0.0 is not yet tagged** — latest stable is v0.5.23
-(2026-11-02), now pinned in `runner-lib.sh`. 1.0 is a stability release: it
+(2026-11-02), now pinned in `libexec/runner-lib.sh`. 1.0 is a stability release: it
 hardens 0.5.x features, freezes a 1.x compatibility policy, and rejects
 unsupported configs with named errors instead of silently adjusting them.
 
@@ -119,8 +119,8 @@ category script rather than adding per-category abliterated scripts:
 | reason | `codgician/...-Claude-4.6-Opus-Reasoning-Distilled-GPTQ-int4` | `huihui-ai/Huihui-Qwen3.5-35B-A3B-Claude-4.6-Opus-abliterated` (BF16 ~70 GB) |
 | general | `cyankiwi/Qwen3-Next-80B-A3B-Thinking-AWQ-4bit` | `amphineko/Huihui-Qwen3-Next-80B-A3B-Thinking-abliterated-AutoRound-W4A16` (41.5 GB) |
 | lite | `Qwen/Qwen3-4B-Instruct-AWQ` | `huihui-ai/Huihui-Qwen3-4B-Instruct-2507-abliterated` (BF16 ~8 GB) |
-| dedicated | `model-abliterated.sh` (port 8008) | `huihui-ai/Huihui-Qwen3.8-27B-abliterated` (BF16 ~54 GB, SGLang — co-run headroom); max-quality alt: `Huihui-Qwen3.8-Flash-Next-abliterated-v2-GGUF` swift-IQ3_S (~84 GB, Strata) |
+| dedicated | `scripts/model-abliterated.sh` (port 8008) | `huihui-ai/Huihui-Qwen3.8-27B-abliterated` (BF16 ~54 GB, SGLang — co-run headroom); max-quality alt: `Huihui-Qwen3.8-Flash-Next-abliterated-v2-GGUF` swift-IQ3_S (~84 GB, Strata) |
 
-The dedicated `model-abliterated.sh` exists because abliteration is a variant
+The dedicated `scripts/model-abliterated.sh` exists because abliteration is a variant
 of a role — one uncensored endpoint, not a fifth category axis. Aligned and
 abliterated 80B-class models cannot co-run anyway (~90+ GB combined weights).

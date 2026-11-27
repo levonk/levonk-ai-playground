@@ -8,7 +8,7 @@
 # content (falling back to the reasoning field, then the raw body).
 #
 # Usage:
-#   ./test-query-local.sh [OPTIONS] [PROMPT]
+#   ./scripts/test-query-local.sh [OPTIONS] [PROMPT]
 #
 # Arguments:
 #   PROMPT              Prompt text to send. Multiple positional args are
@@ -32,10 +32,10 @@
 # Requires `curl` and `jq`.
 #
 # Examples:
-#   ./test-query-local.sh                         # ping ai:8002
-#   ./test-query-local.sh 'hello world'           # custom prompt, ai:8002
-#   ./test-query-local.sh -p 8002 'hello world'   # explicit port
-#   ./test-query-local.sh -h 10.0.0.5 -p 8001 -m qwen3 hi
+#   ./scripts/test-query-local.sh                         # ping ai:8002
+#   ./scripts/test-query-local.sh 'hello world'           # custom prompt, ai:8002
+#   ./scripts/test-query-local.sh -p 8002 'hello world'   # explicit port
+#   ./scripts/test-query-local.sh -h 10.0.0.5 -p 8001 -m qwen3 hi
 #
 set -uo pipefail
 REMOTE_HOST="${REMOTE_HOST:-ai}"
