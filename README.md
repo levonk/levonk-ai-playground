@@ -43,7 +43,9 @@ Each model runs on a unique host port to allow simultaneous deployment:
 | `model-lite.sh` | Qwen3-4B-Instruct-AWQ-4bit | Qwen | 8004 | ~2.5 GB | Lightweight companion for simple tasks |
 | `model-tts.sh` | Kokoro-82M | hwdsl2 | 8005 | ~0.3 GB | OpenAI-compatible `/v1/audio/speech` |
 | `model-stt.sh` | Whisper large-v3-turbo | hwdsl2 | 8006 | ~1.5 GB | OpenAI-compatible `/v1/audio/transcriptions` |
-| `model-system-one.sh` | system-one-qwen3.5-4b-scorer-v2b (LoRA on Qwen3.5-4B-Base) | pngwn | 8007 | ~9 GB bf16 | Native Python scorer (torch+PEFT), `POST /score` — not a chat endpoint |
+| `model-flash.sh` | Qwen3.8-Flash-Next (NVFP4 pack) | nvidia | 8007 | ~68 GB | Strata runtime — GB10-tuned, ~46 tok/s |
+| `model-abliterated.sh` | Huihui-Qwen3.8-27B-abliterated (bf16) | huihui-ai | 8008 | ~54 GB | Uncensored endpoint (SGLang; co-run headroom) |
+| `model-system-one.sh` | system-one-qwen3.5-4b-scorer-v2b (LoRA on Qwen3.5-4B-Base) | pngwn | 8009 | ~9 GB bf16 | Native Python scorer (torch+PEFT), `POST /score` — not a chat endpoint |
 
 VRAM figures are approximate for AWQ-4bit / GPTQ-int4 quantization on the
 NVIDIA GB10 128GB. See [`internal-docs/platforms/`](internal-docs/platforms/INDEX.md)
@@ -64,7 +66,9 @@ Run a specific model:
 ./scripts/model-lite.sh        # 4B lightweight model (port 8004)
 ./scripts/model-tts.sh         # Kokoro TTS (port 8005)
 ./scripts/model-stt.sh         # Whisper STT (port 8006)
-./scripts/model-system-one.sh  # System One decision scorer (port 8007)
+./scripts/model-flash.sh       # Qwen3.8-Flash-Next via Strata (port 8007)
+./scripts/model-abliterated.sh # Abliterated Qwen3.8-27B via SGLang (port 8008)
+./scripts/model-system-one.sh  # System One decision scorer (port 8009)
 ```
 
 ### Custom Configuration
@@ -124,7 +128,7 @@ Two helper scripts in `scripts/` send a quick prompt to a running model server
 and print the response, useful for smoke-testing a deployment after
 `model-*.sh` brings it up. Endpoint-specific tests that can't use the chat
 API live in `tests/` — currently `tests/test-system-one.sh` for the scorer
-(`GET /health` + `POST /score` on port 8007).
+(`GET /health` + `POST /score` on port 8009).
 
 ### `test-query.sh` — local Docker discovery
 
@@ -198,6 +202,21 @@ All scripts support these environment variables:
 - `HUGGING_FACE_HUB_TOKEN` - HF token for private models (loaded from `.env`)
 - `OTLP_TRACES_ENDPOINT` - OTLP endpoint for OpenTelemetry tracing (e.g. `http://openlit:4318`). When set, vLLM gets `--otlp-traces-endpoint` and accepts incoming `traceparent` headers for distributed tracing with LiteLLM. Empty/unset = tracing disabled.
 
+### Strata Environment Variables (`RUNTIME=strata`)
+
+Strata is a native CLI engine (no Docker) with a tuned DGX Spark build — see
+[`internal-docs/guides/runtime-selection.md`](internal-docs/guides/runtime-selection.md).
+`strata launch` starts the server as a managed background process and returns.
+
+- `STRATA_FAMILY` - Catalog model family (e.g. `nvfp4`, `qwen`). Unset = HF repo mode.
+- `STRATA_PACK` - Catalog pack name (default: `$MODEL`); e.g. `nvfp4`, `iq3_s`.
+- `STRATA_GGUF_PATTERN` - `hf download --include` pattern in HF repo mode (e.g. `swift-IQ3_S/*`).
+- `STRATA_DATA_DIR` - Strata data/model dir (default: `$LOCAL_CACHE_DIR/strata`).
+- `STRATA_CONTEXT` - Context size (default: `64k`).
+- `STRATA_ACCESS` - `local|lan|cloudflare|tailscale` (default: `lan`).
+- `STRATA_API_KEY` - Optional API key clients must send (default: `--no-api-key`).
+- `STRATA_VERSION` - Optional version pin for reproducibility.
+
 ### TTS/STT Environment Variables
 
 - `TTS_IMAGE` - Override the Kokoro TTS Docker image (default: `hwdsl2/kokoro-server:cuda` on NVIDIA, `hwdsl2/kokoro-server` on CPU)
@@ -233,7 +252,7 @@ This deployment has **two files**, unlike the LLM scripts:
 
 - `scripts/model-system-one.sh` — the runner script (repo convention: one
   `model-*.sh` per model). Detects the system, checks Python deps, and
-  launches the server on port 8007.
+  launches the server on port 8009.
 - `libexec/system-one-server.py` — the actual HTTP service (`POST /score`), a small
   stdlib server it launches via `run_native`. It exists because the scorer's
   classification head lives in the adapter's `modules_to_save`, which
@@ -336,11 +355,12 @@ launch it via `run_native()` — see `scripts/model-system-one.sh`.
 - `stop_existing_container()` - Stop running container or process if exists
 - `detect_system()` - Auto-detect hardware type (nvidia, apple-silicon, vulkan, cpu)
 - `detect_runtime()` - Auto-select runtime based on detected system
-- `run_container()` - Dispatch to the selected runtime (sglang, vllm, freetoken, mlx)
+- `run_container()` - Dispatch to the selected runtime (sglang, vllm, freetoken, mlx, strata)
 - `run_sglang_container()` - Run SGLang in Docker (dense models on GB10)
 - `run_vllm_container()` - Run vLLM in Docker (GPTQ, compressed-tensors, multi-GPU PP)
 - `run_freetoken()` - Run FreeToken as native Python (MoE models)
 - `run_mlx()` - Run vllm-mlx as native Python (Apple Silicon)
+- `run_strata()` - Run Strata as native CLI (GB10-tuned GGUF packs; catalog or HF repo mode)
 - `run_custom_container()` - Run a custom Docker image (TTS, STT, other services)
 - `run_native()` - Run a native Python process (TTS/STT on Apple Silicon/CPU)
 
@@ -371,6 +391,7 @@ Topic guides that apply across all platforms:
 - [`internal-docs/guides/lightweight-companion-models.md`](internal-docs/guides/lightweight-companion-models.md) — Why and how to use a lite model
 - [`internal-docs/guides/ssd-wear-mitigation.md`](internal-docs/guides/ssd-wear-mitigation.md) — Protecting Mac SSDs with external storage
 - [`internal-docs/guides/networking-guide.md`](internal-docs/guides/networking-guide.md) — Tailscale/tailnet for multi-device access
+- [`internal-docs/guides/runtime-selection.md`](internal-docs/guides/runtime-selection.md) — Scenario → runner matrix (when to use SGLang/vLLM/FreeToken/Strata/MLX; why Basalt is out for GB10)
 
 ### FP8 KV Cache
 

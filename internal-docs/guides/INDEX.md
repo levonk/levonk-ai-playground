@@ -17,3 +17,4 @@
 | [Lightweight Companion Models](lightweight-companion-models.md) | Why and how to run a small model alongside a big one | lws.io |
 | [SSD Wear Mitigation](ssd-wear-mitigation.md) | Protecting soldered Mac SSDs — external storage strategy | Research |
 | [Networking Guide](networking-guide.md) | Tailscale/tailnet for multi-device model access | lws.io |
+| [Runtime Selection](runtime-selection.md) | Scenario → runner matrix (SGLang/vLLM/FreeToken/Strata/Basalt/MLX); abliterated model mapping | Research |

@@ -17,14 +17,14 @@ date:
 | Type | Flat single-project repo (not a monorepo) |
 | Category | Shell-script LLM/TTS/STT model deployment playground |
 | Language | Bash |
-| Runtime | SGLang, FreeToken, vLLM (Docker on NVIDIA), MLX (native on Apple Silicon) |
+| Runtime | SGLang, FreeToken, vLLM (Docker on NVIDIA), Strata (native CLI on GB10), MLX (native on Apple Silicon) |
 | Repository | https://github.com/levonk/levonk-ai-playground |
 | README | [`README.md`](README.md) — architecture rationale, model table, env-var reference |
 
 ## Project Overview
 
 A playground for deploying LLMs (and TTS/STT models) via multiple inference
-runtimes (SGLang, FreeToken, vLLM, MLX) on NVIDIA GPUs and Apple Silicon.
+runtimes (SGLang, FreeToken, vLLM, Strata, MLX) on NVIDIA GPUs and Apple Silicon.
 The repo tracks top-performing models from
 [llmfit](https://github.com/AlexsJones/llmfit) and provides one script per
 model plus a shared library. Each model binds a unique host port so multiple
@@ -55,7 +55,7 @@ printf 'HUGGING_FACE_HUB_TOKEN=hf_xxx\n' > .env   # required for private models
 ```
 
 Each `scripts/model-*.sh` auto-detects the system and selects the appropriate
-runtime (SGLang, FreeToken, vLLM, or MLX). Docker-based runtimes pull the
+runtime (SGLang, FreeToken, vLLM, Strata, or MLX). Docker-based runtimes pull the
 pinned image and start an OpenAI-compatible server on the script's host
 port. Smoke-test a running server with `./scripts/test-query.sh` (auto-discovers
 Docker LLM containers) or `./scripts/test-query-local.sh` (targets a remote host).

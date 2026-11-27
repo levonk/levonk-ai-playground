@@ -30,7 +30,7 @@ Environment variables:
     S1_MAX_OPTIONS   max options per request (default: 64)
     S1_DEVICE        cuda|mps|cpu (default: auto)
     S1_DTYPE         bf16|fp16|fp32 (default: bf16 on cuda/mps, fp32 on cpu)
-    PORT             listen port (default: 8007; --port overrides)
+    PORT             listen port (default: 8009; --port overrides)
 """
 
 import argparse
@@ -218,7 +218,7 @@ class Handler(BaseHTTPRequestHandler):
 def main():
     ap = argparse.ArgumentParser(description="System One scorer server")
     ap.add_argument("--port", type=int,
-                    default=int(os.environ.get("PORT", "8007")))
+                    default=int(os.environ.get("PORT", "8009")))
     ap.add_argument("--host", default="0.0.0.0")
     args = ap.parse_args()
 

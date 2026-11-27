@@ -24,18 +24,18 @@
 #
 # License note: the adapter is CC-BY-NC-4.0 — non-commercial use only.
 #
-# Port: 8007 (unique, allows co-location with the LLM/TTS/STT services)
+# Port: 8009 (unique, allows co-location with the LLM/TTS/STT services)
 # API:  GET  /health     — liveness + model id
 #       GET  /v1/models  — OpenAI-style model list (for test-query probes)
 #       POST /score      — {"state": "...", "question": "...", "options": [...]}
 #
 # Usage:
-#   ./scripts/model-system-one.sh                     # start scorer on port 8007
+#   ./scripts/model-system-one.sh                     # start scorer on port 8009
 #   HOST_PORT=9007 ./scripts/model-system-one.sh      # custom port
 #   S1_TEMPERATURE=1.0 ./scripts/model-system-one.sh  # disable calibration
 #
 # Test:
-#   curl -X POST http://localhost:8007/score \
+#   curl -X POST http://localhost:8009/score \
 #     -H "Content-Type: application/json" \
 #     -d '{"state":"Customer: my shoes arrived in the wrong size",
 #          "question":"Which team should handle this?",
@@ -80,7 +80,7 @@ configure_model() {
       # Same native deployment on every system — the server auto-selects
       # cuda/mps/cpu. ~8.5 GB in bf16 leaves plenty of headroom for
       # co-located models on GB10.
-      HOST_PORT="${HOST_PORT:-8007}"
+      HOST_PORT="${HOST_PORT:-8009}"
       # Name used by stop_existing_container()'s pgrep match; must appear in
       # the process command line (the server script's filename does).
       S1_CONTAINER_NAME="${S1_CONTAINER_NAME:-system-one-server.py}"

@@ -12,7 +12,7 @@
 #   ./tests/test-system-one.sh [OPTIONS]
 #
 # Options:
-#   -p, --port PORT     Target host port. Default: 8007
+#   -p, --port PORT     Target host port. Default: 8009
 #   -h, --host HOST     Host or IP. Default: $REMOTE_HOST or `ai`
 #       --HOST HOST     Same as --host (overrides the `ai` default).
 #       --help          Show usage and exit.
@@ -26,7 +26,7 @@
 # (without jq the test only checks for HTTP 200 and prints the raw body).
 #
 # Examples:
-#   ./tests/test-system-one.sh              # ping ai:8007
+#   ./tests/test-system-one.sh              # ping ai:8009
 #   ./tests/test-system-one.sh -h localhost # scorer running on this machine
 #   ./tests/test-system-one.sh -p 9007      # custom port
 #
@@ -37,7 +37,7 @@ MAX_TIME="${MAX_TIME:-120}"
 usage() { echo "Usage: $0 [-p PORT] [-h HOST]"; exit 0; }
 TARGET_PORT=""
 while [[ $# -gt 0 ]]; do case $1 in -h|--host|--HOST) REMOTE_HOST="$2"; shift 2;; -p|--port) TARGET_PORT="$2"; shift 2;; --help) usage;; *) echo "unknown arg: $1" >&2; exit 2;; esac; done
-TARGET_PORT="${TARGET_PORT:-8007}"
+TARGET_PORT="${TARGET_PORT:-8009}"
 BASE_URL="http://${REMOTE_HOST}:${TARGET_PORT}"
 
 # curl error code -> human message
