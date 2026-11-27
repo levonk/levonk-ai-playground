@@ -2,8 +2,8 @@
 title: "Project Maya: Packaged Frontier-MoE Serving — Per-Model Engines with Tiered VRAM/RAM/SSD Expert Placement"
 date:
   created: 2026-10-27
-  knowledge-basis: 2026-10-27
-  last-used: 2026-10-27
+  knowledge-basis: 2026-11-27
+  last-used: 2026-11-27
 tags:
   - research
   - inference-engine
@@ -36,37 +36,43 @@ source:
 
 **Project Maya** (mw00/project-maya, MIT) is a *packaged* frontier-MoE
 serving product — engine + server + dashboard + its own quantized weights —
-that runs exactly **three model families**: GLM-5.3-Flash (321B),
-DeepSeek-V4.1-Flash-1017 (748B), and MiniMax-M3.1-Flash (428B). Each model
-gets a purpose-built CUDA engine (`maya`, `maya-ds4`, `maya-mm3`) that
-places hot experts in VRAM, warm experts in RAM, and cold experts on NVMe,
-with a one-command `./setup.sh` that measures the machine and picks the
-quant tier, context length, and drafter.
+that runs a curated set of MoE families: **seven as of 2026-11-27** (three
+at drafting — it grew fast): GLM-5.3 (744B), GLM-5.3-Flash (321B),
+DeepSeek-V4.1-Flash-1017 (748B), MiniMax-M3.1-Flash (428B), Hy4-Flash
+(220B), Ling-3.2-air (128B), and Inkling 2 Mini (26B). Each model gets a
+purpose-built CUDA engine (`maya`, `maya-ds4`, `maya-mm3`, …) that places
+hot experts in VRAM, warm experts in RAM, and cold experts on NVMe, with a
+one-command `./setup.sh` that measures the machine and picks the quant
+tier, context length, and drafter. Maya was started from
+[Strata](https://github.com/Niko1221/Strata) — itself now a packaged
+one-click engine (0.2.x line) whose model family overlaps Maya's on
+Hy4-Flash and Inkling 2 Mini.
 
 It is the **strongest direct competitor to the FreeToken/Colibri
-frontier-MoE slot — but only for its three supported models**. It is not a
+frontier-MoE slot — but only for its supported families**. It is not a
 general MoE engine: any checkpoint outside those families simply does not
 run. It also lacks FreeToken's semantic-aware agentic caching, which
 matters for this repo's 32–128 concurrent-agent workload.
 
 **Bottom line for this repo:** add Maya to the ADR as the **model-specific
-preferred engine for GLM-5.3 / DeepSeek-V4.1 / MiniMax-M3.1 pending a GB10
-benchmark against FreeToken's `hybrid` backend**. FreeToken stays the
-general MoE default; Colibri stays the emergency fallback; nothing else in
-the tier map changes. The GB10 data point that already exists (16.5 tok/s
-on GLM-5.3 · Maya-S at 128K ctx) is encouraging but needs a head-to-head.
+preferred engine for its supported families pending a GB10 benchmark
+against FreeToken's `hybrid` backend**. FreeToken stays the general MoE
+default; Colibri stays the emergency fallback; nothing else in the tier
+map changes. The GB10 data point that already exists (16.5 tok/s on
+GLM-5.3-Flash · Maya-S at 128K ctx) is encouraging but needs a
+head-to-head.
 
 ## What Project Maya Is
 
 | Field | Value |
 |-------|-------|
 | Project | [mw00/project-maya](https://github.com/mw00/project-maya) |
-| Stars | 2.1k (as of 2026-10-27; created 2026-10-06 — ~3 weeks old) |
-| License | MIT (engine); models keep their own licenses (GLM/DeepSeek MIT; MiniMax Community License) |
-| Language | CUDA/C++ — built on [Strata](https://github.com/Niko1221/Strata), [ggml/llama.cpp](https://github.com/ggml-org/llama.cpp), [exllamav3](https://github.com/turboderp-org/exllamav3) EXL3, [beellama.cpp](https://github.com/Anbeeld/beellama.cpp) DFlash2 |
+| Stars | 3.4k (as of 2026-11-27; created 2026-10-06 — ~8 weeks old) |
+| License | MIT (engine); models keep their own licenses (GLM-5.3-Flash/DeepSeek MIT; MiniMax Community License; GLM-5.3, Hy4, Ling, Inkling per-vendor) |
+| Language | CUDA/C++ — started from [Strata](https://github.com/Niko1221/Strata), built on [ggml/llama.cpp](https://github.com/ggml-org/llama.cpp), [exllamav3](https://github.com/turboderp-org/exllamav3) EXL3, [beellama.cpp](https://github.com/Anbeeld/beellama.cpp) DFlash2 |
 | Install | `git clone` + `./setup.sh` (interactive, auto-tuning); `START-MAYA.bat` on Windows |
-| Hardware | NVIDIA CC ≥ 7.0 (V100/RTX 20+), 1–16 GPUs; AMD experimental (RX 7900, R9700, Strix/Gorgon Halo, ROCm 7); Linux x86-64; Windows 10/11 experimental (not WSL2) |
-| Models | GLM-5.3-Flash (321B, ~18B active, 1M ctx), DeepSeek-V4.1-Flash-1017 (748B), MiniMax-M3.1-Flash (428B, 23B active, 1M ctx) |
+| Hardware | NVIDIA CC ≥ 7.0 (V100/RTX 20+), 1–16 GPUs, from 8 GB VRAM; AMD on Linux (RX 7900, R9700, RX 9070, Strix/Gorgon Halo, ROCm 7); Linux x86-64; Windows 10/11 (not WSL2); Apple Silicon Metal experimental (GLM-5.3-Flash only) |
+| Models | GLM-5.3 (744B), GLM-5.3-Flash (321B, ~18B active, 1M ctx), DeepSeek-V4.1-Flash-1017 (748B), MiniMax-M3.1-Flash (428B, 23B active, 1M ctx), Hy4-Flash (220B, vision), Ling-3.2-air (128B, vision, MTP), Inkling 2 Mini (26B, vision) — all 1M ctx where stated by vendor |
 
 ## Key Innovations
 
@@ -131,14 +137,14 @@ way — vLLM/SGLang/FreeToken serve whatever checkpoint you hand them.
 
 | Scenario | Current Default | Maya Impact |
 |----------|----------------|-------------|
-| In-VRAM dense, max throughput | SGLang (cu130) | ❌ No impact — Maya is MoE-only, 3 families |
-| In-VRAM MoE, multi-agent long-context | FreeToken | ➖ Partial contender — only for its 3 models; no semantic anchor caching |
+| In-VRAM dense, max throughput | SGLang (cu130) | ❌ No impact — Maya is MoE-only, curated families |
+| In-VRAM MoE, multi-agent long-context | FreeToken | ➖ Partial contender — only for its supported families; no semantic anchor caching |
 | GPTQ / compressed-tensors / multi-GPU PP | vLLM | ❌ No impact |
 | Brand-new arch / GGUF-only | llama.cpp | ❌ No impact (Maya *consumes* GGUF but only its own builds) |
-| Frontier MoE not fitting VRAM | **FreeToken** (hybrid); Colibri emergency | ⚔️ **Direct contender — for its 3 supported models only** |
+| Frontier MoE not fitting VRAM | **FreeToken** (hybrid); Colibri emergency | ⚔️ **Direct contender — for its supported families only** |
 | Code execution | Glom | ❌ No impact |
 
-### Why Maya Is a Serious Contender (for its three models)
+### Why Maya Is a Serious Contender (for its supported families)
 
 1. **Purpose-built beats general-purpose — probably.** A per-model engine
    with model-native prompt format, MTP/drafter integration, and
@@ -157,13 +163,14 @@ way — vLLM/SGLang/FreeToken serve whatever checkpoint you hand them.
    accuracy deltas remove the re-quantization burden that FreeToken
    imposes on GPTQ models (see the FreeToken note's Option D).
 5. **MIT, single maintainer + co-maintainer, extremely active**
-   (pushed today, 87 open issues — a fast-moving tracker).
+   (active daily pushes, 275 open issues — a fast-moving tracker).
 
 ### Why FreeToken Stays the General MoE Default
 
 1. **Coverage**: FreeToken serves 20+ MoE checkpoints (Qwen3.5/3.6-A3B,
-   gpt-oss, Gemma-4, Muse-Glimmer, GLM-4.7/5.2…). Maya serves 3 families.
-   The repo's model rotation depends on checkpoint breadth.
+   gpt-oss, Gemma-4, Muse-Glimmer, GLM-4.7/5.2…). Maya serves 7 families —
+   still a hard boundary, though it grew 3→7 in 8 weeks and now spans
+   26B–744B. The repo's model rotation depends on checkpoint breadth.
 2. **Semantic-aware agentic caching**: anchor checkpoints for mid-session
    context edits are purpose-built for the 32–128 agent workload. Maya's
    DS4 conversation slots are parking/swap, not anchor-point reuse, and
@@ -201,14 +208,14 @@ Amend the frontier-MoE row of the scenario map:
 
 | Scenario | Default | Fallback / alternative |
 |----------|---------|------------------------|
-| Frontier MoE that does not fit in VRAM | **FreeToken** (hybrid) — general default | **Project Maya** — preferred for GLM-5.3-Flash / DeepSeek-V4.1 / MiniMax-M3.1 *if* GB10 benchmark ≥ FreeToken; Colibri — emergency fallback; Remote API — temporary (violates self-hosted) |
+| Frontier MoE that does not fit in VRAM | **FreeToken** (hybrid) — general default | **Project Maya** — preferred for its supported families (GLM-5.3/5.3-Flash, DS-V4.1, MM3.1, Hy4, Ling-3.2-air, Inkling 2 Mini) *if* GB10 benchmark ≥ FreeToken; Colibri — emergency fallback; Remote API — temporary (violates self-hosted) |
 
 And in the per-model-type table, mark Frontier MoE as "FreeToken default;
-Maya preferred for its 3 supported families pending benchmark."
+Maya preferred for its supported families pending benchmark."
 
 The formal amendment has been authored:
 [[adr-20261027-project-maya-model-specific-engine]] — proposes Maya as
-the preferred engine for its three supported families pending a GB10
+the preferred engine for its supported families pending a GB10
 head-to-head benchmark, with FreeToken retained as the general MoE
 default.
 
@@ -256,9 +263,10 @@ ANTHROPIC_BASE_URL=http://127.0.0.1:8006 claude
       traffic (long prompts, tool schemas, prompt-progress streaming)?
 - [ ] DS4 conversation slots vs FreeToken anchor checkpoints for
       agent parent/worker splits — is slot parking enough?
-- [ ] Project longevity: 3 weeks old, single lead maintainer
+- [ ] Project longevity: ~8 weeks old, lead maintainer + co-maintainer
       (bus-factor vs FreeToken's Zaharia/Stoica/Han/Keutzer team).
-      Track stars/issue velocity before depending on it.
+      Track stars/issue velocity before depending on it — though the
+      3→7-family growth and 2.1k→3.4k★ in 8 weeks signal real momentum.
 - [ ] Maya-M-Derisked (refusal-reduced weight edit) — worth evaluating
       for the agent fleet's refusal-rate problem?
 
@@ -275,4 +283,4 @@ ANTHROPIC_BASE_URL=http://127.0.0.1:8006 claude
 - Current ADR: [[adr-202608021744-sglang-glom-runtime-mapping]]
 - FreeToken comparison note: [[note-freetoken-edge-native-moe-serving]]
 - Vault-side landscape matrix:
-  `2ndbrain/.../AI Home Network/project-comparison-local-llm-model-runners-20261027-115706.md`
+  `2ndbrain/.../Inference Runtimes/project-comparison-llm-inference-runtimes-20261124190326.md`
